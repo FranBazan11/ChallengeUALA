@@ -9,13 +9,27 @@
     }
   ],
   "defaultOptions" : {
-    "codeCoverage" : false,
+    "codeCoverage" : {
+      "targets" : [
+        {
+          "containerPath" : "container:ChallengeUALA.xcodeproj",
+          "identifier" : "BD6E4480302512F70081CD2A",
+          "name" : "Cities"
+        },
+        {
+          "containerPath" : "container:ChallengeUALA.xcodeproj",
+          "identifier" : "BD6E44C1302518300081CD2A",
+          "name" : "CitiesiOS"
+        }
+      ]
+    },
     "performanceAntipatternCheckerEnabled" : true,
     "targetForVariableExpansion" : {
       "containerPath" : "container:ChallengeUALA.xcodeproj",
       "identifier" : "BD4BA6D730250D4B000B1CA0",
       "name" : "ChallengeUALA"
-    }
+    },
+    "testExecutionOrdering" : "random"
   },
   "testTargets" : [
     {
