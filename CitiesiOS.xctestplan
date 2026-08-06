@@ -9,10 +9,25 @@
     }
   ],
   "defaultOptions" : {
-
+    "codeCoverage" : {
+      "targets" : [
+        {
+          "containerPath" : "container:ChallengeUALA.xcodeproj",
+          "identifier" : "BD6E44C1302518300081CD2A",
+          "name" : "CitiesiOS"
+        }
+      ]
+    },
+    "testExecutionOrdering" : "random"
   },
   "testTargets" : [
-
+    {
+      "target" : {
+        "containerPath" : "container:ChallengeUALA.xcodeproj",
+        "identifier" : "BD6E44CB302518300081CD2A",
+        "name" : "CitiesiOSTests"
+      }
+    }
   ],
   "version" : 1
 }
