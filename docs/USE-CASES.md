@@ -6,6 +6,23 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 
 ---
 
+## MR #1 — Walking skeleton (infraestructura)
+
+*No es una historia de usuario — no deriva de un punto puntual de [REQUISITOS.md](REQUISITOS.md). Es la base técnica sin la cual ninguna historia siguiente puede empezar: el proyecto Xcode, sus targets, y un test verde por target que prueba que la infraestructura funciona (compila, linkea, carga en el test runner, corre desde CI) — no prueba dominio.*
+
+### Checklist
+
+- [x] Proyecto `ChallengeUALA.xcodeproj` con 7 targets: `ChallengeUALA`, `ChallengeUALATests`, `ChallengeUALAUITests`, `Cities`, `CitiesTests`, `CitiesiOS`, `CitiesiOSTests`
+- [x] `Cities` es multiplataforma (macOS + iPhone) — su suite corre en macOS sin simulador
+- [x] `CitiesiOS` y `ChallengeUALA` corren en iOS Simulator
+- [x] `ChallengeUALA` linkea y embebe `Cities.framework` y `CitiesiOS.framework`
+- [x] `CitiesiOSTests` es independiente del target `ChallengeUALA` (sin host app, sin dependencia de build)
+- [x] Un test real por target, no un stub vacío: `Cities` y `CitiesiOS` verifican que su bundle está cargado en el proceso; `ChallengeUALATests` verifica el bundle identifier de la app; `ChallengeUALAUITests` verifica que la app lanza en el simulador
+- [x] Schemes compartidos (`ChallengeUALA`, `Cities`, `CitiesiOS`) + scheme `CI_iOS` con test plan combinado (`CitiesTests` + `CitiesiOSTests` + `ChallengeUALATests` + `ChallengeUALAUITests`)
+- [x] CI en GitHub Actions: job macOS (`-scheme Cities`) + job iOS (`-scheme CI_iOS`), ambos verificados en local con los comandos exactos que corre el workflow
+
+---
+
 ## Historia 1 — Filtrar ciudades por prefijo
 
 **Como** usuario del catálogo
