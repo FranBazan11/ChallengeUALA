@@ -1,0 +1,51 @@
+{
+  "configurations" : [
+    {
+      "id" : "49B15C6B-3E3D-4219-8C7B-C664D99C1CEA",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "performanceAntipatternCheckerEnabled" : true,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:ChallengeUALA.xcodeproj",
+      "identifier" : "BD4BA6D730250D4B000B1CA0",
+      "name" : "ChallengeUALA"
+    }
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:ChallengeUALA.xcodeproj",
+        "identifier" : "BD6E44CB302518300081CD2A",
+        "name" : "CitiesiOSTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:ChallengeUALA.xcodeproj",
+        "identifier" : "BD4BA6E430250D4C000B1CA0",
+        "name" : "ChallengeUALATests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:ChallengeUALA.xcodeproj",
+        "identifier" : "BD4BA6EE30250D4C000B1CA0",
+        "name" : "ChallengeUALAUITests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:ChallengeUALA.xcodeproj",
+        "identifier" : "BD6E448A302512F70081CD2A",
+        "name" : "CitiesTests"
+      }
+    }
+  ],
+  "version" : 1
+}

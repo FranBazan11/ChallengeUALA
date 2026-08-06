@@ -1,0 +1,35 @@
+{
+  "configurations" : [
+    {
+      "id" : "8DF9E28A-740F-48ED-A15A-A484A7AC7543",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : {
+      "targets" : [
+        {
+          "containerPath" : "container:ChallengeUALA.xcodeproj",
+          "identifier" : "BD6E4480302512F70081CD2A",
+          "name" : "Cities"
+        }
+      ]
+    },
+    "performanceAntipatternCheckerEnabled" : true,
+    "testExecutionOrdering" : "random"
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:ChallengeUALA.xcodeproj",
+        "identifier" : "BD6E448A302512F70081CD2A",
+        "name" : "CitiesTests"
+      }
+    }
+  ],
+  "version" : 1
+}
