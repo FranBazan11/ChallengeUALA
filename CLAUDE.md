@@ -28,6 +28,16 @@ Este documento rige cómo se trabaja en este repo. Se aplica a todo el trabajo, 
 - Verificar ausencia de memory leaks en las factories de test (`trackForMemoryLeaks`).
 - Cero lógica condicional dentro de un test — si un test necesita un `if`, son dos tests.
 
+### Estructura de un archivo de test
+
+Todo archivo de test se arma igual, sin improvisar por tarea:
+
+- **`makeSUT` es el único lugar donde se construye el SUT.** Ningún test lo instancia por su cuenta. Devuelve una tupla con el SUT y sus colaboradores (`-> (sut: X, spy: Y)`) cuando los hay, propaga `file:` y `line:`, y registra cada instancia en `trackForMemoryLeaks` antes de devolverla. Si un test necesita datos distintos, se resuelve con una sobrecarga de `makeSUT`, no con un `if` adentro del helper.
+- **`makeSUT` aplica cuando el SUT es una instancia.** Un mapper estático sin dependencias no tiene qué construir ni qué trackear: ahí la centralización va en las factories de datos, y un `makeSUT` que solo devuelve una función es ruido. Un SUT que es `struct` lleva `makeSUT` igual, pero sin `trackForMemoryLeaks` ni `file:`/`line:` — un value type no puede leakear.
+- **Las factories de datos devuelven el par modelo + representación cruda**: `makeCity(...) -> (model: City, json: [String: Any])`. Así un JSON literal y el modelo que se espera de él no pueden desincronizarse, y los nombres del formato de red quedan escritos en un solo lugar del archivo.
+- **Las aserciones que se repiten se extraen a un `expect(...)`** que propaga `file:` y `line:`.
+- **Los helpers son `private` dentro de la clase de test que los usa**, agrupados al final del archivo bajo `// MARK: - Helpers`. Solo lo que comparten varias clases sube a un archivo propio (`XCTestCase+MemoryLeakTracking.swift`, `SharedTestHelpers.swift`) — nunca a una `extension XCTestCase`, que se lo cuelga a todo el target aunque lo use una sola clase.
+
 ## Git
 
 - **Claude nunca ejecuta `git add`, `git commit` ni `git push`.** El trabajo se deja completo en el working tree. Claude entrega: resumen de qué cambió y por qué, el output real de correr la suite de tests, y el mensaje de commit redactado en español e imperativo, listo para que el usuario lo revise y lo ejecute.
@@ -43,7 +53,8 @@ Este documento rige cómo se trabaja en este repo. Se aplica a todo el trabajo, 
 - Sin librerías de terceros — lo prohíbe el enunciado del challenge.
 - Nombres explícitos. Sin abreviaturas.
 - **Sin comentarios.** El código se explica solo: nombres que dicen la intención, funciones chicas, tipos que hacen irrepresentable lo inválido. Si aparece la tentación de escribir un comentario, es señal de renombrar o extraer una función, no de agregar texto.
-- **Única excepción, y ninguna más sin aprobación del usuario:** un doc comment (`///`) sobre el tipo del índice de búsqueda, justificando por qué esa representación (array ordenado + binary search) es más eficiente que las alternativas. No es una concesión de estilo: el enunciado lo pide como criterio de evaluación explícito, y pide textualmente que la justificación vaya en el código:
+- **`// MARK:` está permitido en los archivos de test**, como separador estructural del bloque de helpers. No es un comentario explicativo — no dice qué hace el código, solo lo agrupa — así que no contradice la regla de arriba, por el mismo argumento que ya vale para los headers de autoría.
+- **Única excepción en código de producción, y ninguna más sin aprobación del usuario:** un doc comment (`///`) sobre el tipo del índice de búsqueda, justificando por qué esa representación (array ordenado + binary search) es más eficiente que las alternativas. No es una concesión de estilo: el enunciado lo pide como criterio de evaluación explícito, y pide textualmente que la justificación vaya en el código:
   > *"You can preprocess the list into any other representation that you consider more efficient for searches and display. Provide information of why that representation is more efficient in the comments of the code."* — sección *Evaluation criteria*, ver [docs/REQUISITOS.md](docs/REQUISITOS.md)
 
 ## Autoría
