@@ -58,29 +58,6 @@ final class CityCatalogMapperTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeCity(
-        id: Int,
-        name: String,
-        countryCode: String,
-        latitude: Double,
-        longitude: Double
-    ) -> (model: City, json: [String: Any]) {
-        let model = City(id: id, name: name, countryCode: countryCode, latitude: latitude, longitude: longitude)
-
-        let json: [String: Any] = [
-            "_id": id,
-            "name": name,
-            "country": countryCode,
-            "coord": ["lat": latitude, "lon": longitude]
-        ]
-
-        return (model, json)
-    }
-
-    private func makeCatalogJSON(_ cities: [[String: Any]]) -> Data {
-        try! JSONSerialization.data(withJSONObject: cities)
-    }
-
     private func expect(
         toThrowInvalidDataOn data: Data,
         file: StaticString = #filePath,
