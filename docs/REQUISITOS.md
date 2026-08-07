@@ -24,7 +24,7 @@ Tenemos una lista de ciudades con alrededor de 200k entradas en formato JSON. Ca
 
 Tu tarea es:
 
-- En la App, descargar la lista de ciudades desde este gist.
+- En la App, descargar la lista de ciudades desde [este gist](https://gist.githubusercontent.com/hernan-uala/dce8843a8edbe0b0018b32e137bc2b3a/raw/0996accf70cb0ca0e16f9a99e0ee185fafca7af1/cities.json).
 - Poder filtrar los resultados por un string de prefijo dado, siguiendo estos requisitos:
   - Seguir la definición de prefijo especificada en la sección de aclaraciones más abajo.
   - Optimizar para búsquedas rápidas. El tiempo de carga de la app no es tan importante.
