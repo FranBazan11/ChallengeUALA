@@ -58,17 +58,60 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 
 ### Checklist
 
-- [ ] `search(prefix:)` con prefijo que coincide con varias ciudades
-- [ ] Case insensitive: `"AL"`, `"al"`, `"Al"` producen el mismo resultado
-- [ ] Prefijo vacío devuelve el catálogo completo
-- [ ] Prefijo sin coincidencias devuelve una lista vacía
-- [ ] Whitespace, símbolos, acentos y strings largos no crashean y se resuelven de forma consistente
-- [ ] Orden final: ciudad y después país (`"Denver, US"` antes que `"Sydney, AU"`)
-- [ ] Cada nuevo carácter dispara una búsqueda y cancela la anterior si todavía estaba en curso
+- [x] `search(prefix:)` con prefijo que coincide con varias ciudades
+- [x] Case insensitive: `"AL"`, `"al"`, `"Al"` producen el mismo resultado
+- [x] Prefijo vacío devuelve el catálogo completo
+- [x] Prefijo sin coincidencias devuelve una lista vacía
+- [x] Whitespace, símbolos, acentos y strings largos no crashean y se resuelven de forma consistente
+- [x] Orden final: ciudad y después país (`"Denver, US"` antes que `"Sydney, AU"`)
+- [ ] Cada nuevo carácter dispara una búsqueda y cancela la anterior si todavía estaba en curso — es del ViewModel, va en el MR #4
 
 ---
 
-## Historia 2 — Cargar el catálogo remoto
+## Historia 2 — Convertir los datos descargados en el catálogo
+
+**Como** usuario de la app
+**Quiero** que los datos que llegan del servidor se conviertan en ciudades válidas o en un error explícito
+**Para** no ver nunca un catálogo incompleto presentado como si estuviera completo
+
+### Escenarios
+
+- **Dado** datos con el formato del gist, **cuando** se convierten, **entonces** obtengo una ciudad por cada entrada, con su id, nombre, código de país y coordenadas
+- **Dado** una lista vacía, **cuando** se convierte, **entonces** obtengo un catálogo vacío, no un error
+- **Dado** datos que no son el JSON esperado, **cuando** se intenta convertirlos, **entonces** obtengo un error, sin crash y sin catálogo parcial
+- **Dado** una entrada a la que le falta un campo obligatorio, **cuando** se convierte, **entonces** obtengo un error — no una ciudad con datos inventados
+
+### Use Case: Map City Catalog Data
+
+**Data (input):** datos crudos del catálogo
+
+**Curso primario (happy path):**
+1. El sistema interpreta los datos con el formato acordado del catálogo
+2. El sistema construye una ciudad de dominio por cada entrada
+3. El sistema entrega el catálogo
+
+**Curso alternativo — datos vacíos:**
+1. El sistema entrega un catálogo vacío
+
+**Curso alternativo — datos inválidos o incompletos:**
+1. El sistema entrega un error de datos inválidos, sin crashear ni entregar un catálogo parcial
+
+### Contrato
+
+El mapeo recibe `Data` y no sabe de dónde salieron esos bytes: es indistinto si vienen de la red o del disco. Por eso no necesita ningún protocolo — es una función pura del módulo `Cities`, y la decisión de cachear el JSON a disco queda libre para más adelante sin tocar esta historia.
+
+### Checklist
+
+- [x] Datos con el formato del gist producen las ciudades esperadas
+- [x] El mapeo traduce los nombres del formato de red (`_id`, `coord`, `lon`, `lat`) a los del dominio (`id`, `latitude`, `longitude`)
+- [x] Lista vacía produce catálogo vacío, no error
+- [x] Datos que no son el JSON esperado producen error, no crash
+- [x] Entrada con un campo obligatorio faltante produce error, no una ciudad parcial
+- [x] Una sola entrada inválida entre entradas válidas produce error, no un catálogo parcial
+
+---
+
+## Historia 3 — Cargar el catálogo remoto
 
 **Como** usuario de la app
 **Quiero** que la lista de 200.000 ciudades se descargue al iniciar
@@ -78,7 +121,7 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 
 - **Dado** que tengo conectividad, **cuando** abro la app, **entonces** el catálogo se descarga y queda disponible para búsqueda
 - **Dado** que no tengo conectividad, **cuando** abro la app, **entonces** veo un error claro, sin crash
-- **Dado** que el servidor responde con datos corruptos o incompletos, **cuando** se intenta parsear, **entonces** el sistema entrega un error, no un catálogo parcial silencioso
+- **Dado** que el servidor responde con un código de estado inesperado, **cuando** se procesa la respuesta, **entonces** obtengo un error, no un catálogo vacío silencioso
 
 ### Use Case: Load City Catalog
 
@@ -86,28 +129,31 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 
 **Curso primario (happy path):**
 1. El sistema pide los datos a la URL
-2. El sistema valida los datos descargados
-3. El sistema crea el catálogo de ciudades a partir de los datos válidos
+2. El sistema valida la respuesta recibida
+3. El sistema convierte los datos válidos en el catálogo (Historia 2)
 4. El sistema entrega el catálogo
 
 **Curso alternativo — sin conectividad:**
 1. El sistema entrega un error de conectividad
 
-**Curso alternativo — datos inválidos:**
-1. El sistema entrega un error de datos inválidos, sin crashear ni entregar un catálogo parcial
+**Curso alternativo — respuesta inválida:**
+1. El sistema entrega un error de respuesta inválida, sin crashear
+
+### Contrato
+
+El módulo `Cities` define un protocolo `HTTPClient` con una única operación de obtención de datos por URL. Lo define el lado interno (el dominio), y `URLSession` queda del lado de afuera implementándolo desde el app target — nunca al revés.
 
 ### Checklist
 
 - [ ] Request a la URL correcta
-- [ ] JSON válido produce el catálogo esperado
-- [ ] JSON vacío produce catálogo vacío, no error
-- [ ] JSON malformado produce error, no crash
+- [ ] Respuesta exitosa entrega los datos al mapeo de la Historia 2
+- [ ] Código de estado inesperado produce error, no crash
 - [ ] Error de red produce error, no crash
 - [ ] No hay side-effects si el request se completa después de que nadie lo espera
 
 ---
 
-## Historia 3 — Marcar y desmarcar favoritos
+## Historia 4 — Marcar y desmarcar favoritos
 
 **Como** usuario del catálogo
 **Quiero** marcar ciudades como favoritas y que se recuerden
@@ -140,7 +186,7 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 
 ---
 
-## Historia 4 — Filtrar solo favoritos
+## Historia 5 — Filtrar solo favoritos
 
 **Como** usuario del catálogo
 **Quiero** ver solo mis ciudades favoritas
@@ -173,7 +219,7 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 
 ---
 
-## Historia 5 — Ver la ciudad seleccionada en el mapa
+## Historia 6 — Ver la ciudad seleccionada en el mapa
 
 **Como** usuario del catálogo
 **Quiero** que al tocar una ciudad el mapa navegue a sus coordenadas
@@ -202,7 +248,7 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 
 ---
 
-## Historia 6 — Ver la pantalla de información de una ciudad
+## Historia 7 — Ver la pantalla de información de una ciudad
 
 **Como** usuario del catálogo
 **Quiero** abrir una pantalla de detalle de la ciudad
@@ -229,7 +275,7 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 
 ---
 
-## Historia 7 — Layout adaptativo portrait / landscape
+## Historia 8 — Layout adaptativo portrait / landscape
 
 **Como** usuario de la app
 **Quiero** que la UI se adapte a la orientación del dispositivo

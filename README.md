@@ -24,11 +24,23 @@ Un único proyecto Xcode (`ChallengeUALA.xcodeproj`, en la raíz del repo) con 3
 
 Cada uno de los tres tiene su target de tests (`CitiesTests`, `CitiesiOSTests`, `ChallengeUALATests`), más `ChallengeUALAUITests` para los flujos end-to-end de la app ensamblada.
 
+Dentro de `Cities`, los archivos se agrupan por boundary, y `CitiesTests` espeja la misma estructura:
+
+```
+Cities/
+├── CityFeature/     Modelo de dominio
+├── CitySearch/      Índice de búsqueda por prefijo y binary search
+├── CityAPI/         Mapeo del JSON del catálogo y contrato de red
+└── CityFavorites/   Contrato de persistencia de favoritos
+```
+
 **Schemes:** `Cities`, `CitiesiOS` y `ChallengeUALA` son el loop de desarrollo día a día — cada uno corre solo su propia suite. `CI_iOS` es un scheme aparte que junta los 4 test targets de iOS (`CitiesTests` + `CitiesiOSTests` + `ChallengeUALATests` + `ChallengeUALAUITests`) en una sola corrida, que es lo que ejecuta el job de iOS del CI.
 
 ## Cómo correr los tests
 
 Desde Xcode: seleccionar el scheme (`Cities`, `CitiesiOS` o `ChallengeUALA`) y `⌘U`. `Cities` corre en el destino "My Mac"; los otros dos necesitan un simulador de iOS.
+
+Los targets de iOS declaran explícitamente que no soportan Mac Catalyst ni "Designed for iPhone", así que el selector de destinos solo ofrece opciones válidas para cada scheme. Con el scheme `Cities` activo (destino "My Mac") el editor marca `No such module` en los targets iOS-only: es el comportamiento esperado de un proyecto multiplataforma —esos targets no se construyen para ese destino— y se resuelve cambiando de scheme, no es un problema del proyecto.
 
 Desde línea de comandos, los mismos comandos que ejecuta el CI:
 
