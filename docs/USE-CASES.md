@@ -141,15 +141,19 @@ El mapeo recibe `Data` y no sabe de dónde salieron esos bytes: es indistinto si
 
 ### Contrato
 
-El módulo `Cities` define un protocolo `HTTPClient` con una única operación de obtención de datos por URL. Lo define el lado interno (el dominio), y `URLSession` queda del lado de afuera implementándolo desde el app target — nunca al revés.
+El módulo `Cities` define un protocolo `HTTPClient` con una única operación de obtención de datos por URL. Lo define el lado interno (el dominio); su implementación con `URLSession` vive del lado de afuera, en una carpeta de infraestructura propia dentro del mismo módulo — nunca al revés. El app target no la implementa: es el único que la instancia, como Composition Root.
 
 ### Checklist
 
-- [ ] Request a la URL correcta
-- [ ] Respuesta exitosa entrega los datos al mapeo de la Historia 2
-- [ ] Código de estado inesperado produce error, no crash
-- [ ] Error de red produce error, no crash
-- [ ] No hay side-effects si el request se completa después de que nadie lo espera
+- [x] Request a la URL correcta
+- [x] Respuesta exitosa entrega los datos al mapeo de la Historia 2
+- [x] Código de estado inesperado produce error, no crash
+- [x] Error de red produce error, no crash
+- [x] No hay side-effects si el request se completa después de que nadie lo espera
+- [x] El cliente hace un GET a la URL pedida
+- [x] Una respuesta que no es HTTP produce error
+- [x] Una respuesta HTTP con datos entrega esos datos y esa respuesta
+- [x] Una respuesta HTTP sin datos entrega datos vacíos, no un error
 
 ---
 
