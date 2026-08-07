@@ -58,12 +58,12 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 
 ### Checklist
 
-- [ ] `search(prefix:)` con prefijo que coincide con varias ciudades
-- [ ] Case insensitive: `"AL"`, `"al"`, `"Al"` producen el mismo resultado
-- [ ] Prefijo vacío devuelve el catálogo completo
-- [ ] Prefijo sin coincidencias devuelve una lista vacía
-- [ ] Whitespace, símbolos, acentos y strings largos no crashean y se resuelven de forma consistente
-- [ ] Orden final: ciudad y después país (`"Denver, US"` antes que `"Sydney, AU"`)
+- [x] `search(prefix:)` con prefijo que coincide con varias ciudades
+- [x] Case insensitive: `"AL"`, `"al"`, `"Al"` producen el mismo resultado
+- [x] Prefijo vacío devuelve el catálogo completo
+- [x] Prefijo sin coincidencias devuelve una lista vacía
+- [x] Whitespace, símbolos, acentos y strings largos no crashean y se resuelven de forma consistente
+- [x] Orden final: ciudad y después país (`"Denver, US"` antes que `"Sydney, AU"`)
 - [ ] Cada nuevo carácter dispara una búsqueda y cancela la anterior si todavía estaba en curso — es del ViewModel, va en el MR #4
 
 ---
@@ -102,12 +102,12 @@ El mapeo recibe `Data` y no sabe de dónde salieron esos bytes: es indistinto si
 
 ### Checklist
 
-- [ ] Datos con el formato del gist producen las ciudades esperadas
-- [ ] El mapeo traduce los nombres del formato de red (`_id`, `coord`, `lon`, `lat`) a los del dominio (`id`, `latitude`, `longitude`)
-- [ ] Lista vacía produce catálogo vacío, no error
-- [ ] Datos que no son el JSON esperado producen error, no crash
-- [ ] Entrada con un campo obligatorio faltante produce error, no una ciudad parcial
-- [ ] Una sola entrada inválida entre entradas válidas produce error, no un catálogo parcial
+- [x] Datos con el formato del gist producen las ciudades esperadas
+- [x] El mapeo traduce los nombres del formato de red (`_id`, `coord`, `lon`, `lat`) a los del dominio (`id`, `latitude`, `longitude`)
+- [x] Lista vacía produce catálogo vacío, no error
+- [x] Datos que no son el JSON esperado producen error, no crash
+- [x] Entrada con un campo obligatorio faltante produce error, no una ciudad parcial
+- [x] Una sola entrada inválida entre entradas válidas produce error, no un catálogo parcial
 
 ---
 
