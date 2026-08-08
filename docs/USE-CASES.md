@@ -64,7 +64,8 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 - [x] Prefijo sin coincidencias devuelve una lista vacía
 - [x] Whitespace, símbolos, acentos y strings largos no crashean y se resuelven de forma consistente
 - [x] Orden final: ciudad y después país (`"Denver, US"` antes que `"Sydney, AU"`)
-- [ ] Cada nuevo carácter dispara una búsqueda y cancela la anterior si todavía estaba en curso — es del ViewModel, va en el MR #4
+- [x] Cada carácter agregado o borrado actualiza la lista de forma síncrona — 0,36 µs medidos en el MR #2 sobre 200.000 ciudades hacen innecesario un `Task` por tecla
+- [x] La cancelación aplica al `Task` de carga del catálogo, no a la búsqueda — ver Historia 9
 
 ---
 
@@ -305,3 +306,77 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 - [ ] Snapshot en landscape: lista y mapa en paneles
 - [ ] Rotar a mitad de búsqueda conserva el texto del filtro
 - [ ] Rotar con una ciudad seleccionada conserva la selección
+
+---
+
+## Historia 9 — Ver el catálogo mientras se carga
+
+**Como** usuario de la app
+**Quiero** ver el estado de la carga del catálogo
+**Para** saber si la app está funcionando y poder reintentar si falla
+
+### Escenarios
+
+- **Dado** que abro la app, **cuando** el catálogo todavía no llegó, **entonces** veo un indicador de carga
+- **Dado** que el catálogo terminó de cargar, **cuando** se actualiza el estado, **entonces** veo la lista de ciudades
+- **Dado** que no tengo conectividad o el servidor responde mal, **cuando** la carga falla, **entonces** veo un mensaje de error claro y un botón para reintentar
+- **Dado** que la carga falló, **cuando** toco "Reintentar", **entonces** vuelvo a ver el indicador de carga y se dispara una nueva carga
+- **Dado** que estoy cargando, **cuando** la carga se cancela (por ejemplo, me voy de la pantalla), **entonces** no se muestra ningún error
+
+### Use Case: Present City Catalog Load
+
+**Data (input):** ninguno — se dispara al aparecer la pantalla o al reintentar
+
+**Curso primario (happy path):**
+1. El sistema marca el estado como "cargando"
+2. El sistema pide el catálogo al `CityCatalogLoader`
+3. El sistema marca el estado como "cargado", con el catálogo filtrado por el prefijo vigente
+
+**Curso alternativo — error de conectividad o datos inválidos:**
+1. El sistema marca el estado como "error", con un mensaje ya resuelto para mostrar
+2. El sistema permite reintentar, lo que repite el curso primario
+
+**Curso alternativo — cancelación:**
+1. El sistema no marca el estado como "error"
+
+### Contrato
+
+El ViewModel depende del protocolo `CityCatalogLoader` (definido en `Cities/CityFeature/`, junto al modelo de dominio), no del tipo concreto `RemoteCityCatalogLoader` — así el test del ViewModel usa un stub en memoria, y la implementación de red se prueba aparte, como ya hace la Historia 3.
+
+### Checklist
+
+- [x] Estado inicial "cargando" antes de que la primera carga resuelva
+- [x] Carga exitosa deja el estado en "cargado", con los resultados de búsqueda del prefijo vigente
+- [x] Error de conectividad deja el estado en "error" con un mensaje
+- [x] Datos inválidos deja el estado en "error" con un mensaje
+- [x] Reintentar (una nueva llamada a cargar) puede resolver en "cargado" después de una falla previa
+- [x] Cancelación no produce un estado de error
+
+---
+
+## Historia 10 — Ver cada ciudad en la lista
+
+**Como** usuario del catálogo
+**Quiero** ver el nombre, país y coordenadas de cada ciudad en su celda
+**Para** identificarla sin tener que abrir el detalle
+
+### Escenarios
+
+- **Dado** una ciudad del catálogo, **cuando** se muestra su celda, **entonces** veo "Ciudad, CC" como título y las coordenadas como subtítulo
+- **Dado** una búsqueda con resultados, **cuando** se muestra la lista, **entonces** las celdas respetan el orden del índice
+- **Dado** una búsqueda sin coincidencias, **cuando** se muestra la lista, **entonces** veo el estado vacío
+
+### Use Case: Present City Cell
+
+**Data (input):** una `City`
+
+**Curso primario (happy path):**
+1. El sistema arma el título combinando nombre y código de país
+2. El sistema arma el subtítulo con latitud y longitud
+3. El sistema entrega los datos ya listos para esa celda
+
+### Checklist
+
+- [x] El título combina nombre y código de país
+- [x] El subtítulo muestra latitud y longitud
+- [x] Dos ciudades con los mismos datos producen el mismo view model (`Equatable`)

@@ -7,13 +7,7 @@
 
 import Foundation
 
-public struct RemoteCityCatalogLoader: Sendable {
-
-    public enum Error: Swift.Error, Equatable, Sendable {
-        case connectivity
-        case invalidData
-        case cancelled
-    }
+public struct RemoteCityCatalogLoader: CityCatalogLoader {
 
     private let url: URL
     private let client: HTTPClient
@@ -23,7 +17,7 @@ public struct RemoteCityCatalogLoader: Sendable {
         self.client = client
     }
 
-    public func load() async throws(Error) -> CityCatalog {
+    public func load() async throws(CityCatalogLoadError) -> CityCatalog {
         let data: Data
         let response: HTTPURLResponse
         do {

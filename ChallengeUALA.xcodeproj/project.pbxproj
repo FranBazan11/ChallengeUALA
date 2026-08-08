@@ -11,6 +11,7 @@
 		BD6E44CD302518300081CD2A /* CitiesiOS.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BD6E44C2302518300081CD2A /* CitiesiOS.framework */; };
 		BD6E44D7302518300081CD2A /* CitiesiOS.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BD6E44C2302518300081CD2A /* CitiesiOS.framework */; };
 		BD6E44D8302518300081CD2A /* CitiesiOS.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = BD6E44C2302518300081CD2A /* CitiesiOS.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		BD9F98FE3027CB7400DF889E /* Cities.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BD6E4481302512F70081CD2A /* Cities.framework */; };
 		BDE1939F30251A010019A4F4 /* Cities.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BD6E4481302512F70081CD2A /* Cities.framework */; };
 		BDE193A030251A010019A4F4 /* Cities.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = BD6E4481302512F70081CD2A /* Cities.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -50,6 +51,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = BD6E44C1302518300081CD2A;
 			remoteInfo = CitiesiOS;
+		};
+		BD9F99003027CB7400DF889E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BD4BA6D030250D4B000B1CA0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BD6E4480302512F70081CD2A;
+			remoteInfo = Cities;
 		};
 		BDE193A130251A010019A4F4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -169,6 +177,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BD9F98FE3027CB7400DF889E /* Cities.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -371,6 +380,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				BD9F99013027CB7400DF889E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				BD6E44C3302518300081CD2A /* CitiesiOS */,
@@ -595,6 +605,11 @@
 			target = BD6E44C1302518300081CD2A /* CitiesiOS */;
 			targetProxy = BD6E44D5302518300081CD2A /* PBXContainerItemProxy */;
 		};
+		BD9F99013027CB7400DF889E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BD6E4480302512F70081CD2A /* Cities */;
+			targetProxy = BD9F99003027CB7400DF889E /* PBXContainerItemProxy */;
+		};
 		BDE193A230251A010019A4F4 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = BD6E4480302512F70081CD2A /* Cities */;
@@ -703,6 +718,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;

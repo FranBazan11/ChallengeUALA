@@ -144,11 +144,11 @@ final class RemoteCityCatalogLoaderTests: XCTestCase {
         return (sut, client)
     }
 
-    private func load(_ sut: RemoteCityCatalogLoader) -> Task<Result<CityCatalog, RemoteCityCatalogLoader.Error>, Never> {
+    private func load(_ sut: RemoteCityCatalogLoader) -> Task<Result<CityCatalog, CityCatalogLoadError>, Never> {
         Task { await RemoteCityCatalogLoaderTests.resultOf(sut) }
     }
 
-    private static func resultOf(_ sut: RemoteCityCatalogLoader) async -> Result<CityCatalog, RemoteCityCatalogLoader.Error> {
+    private static func resultOf(_ sut: RemoteCityCatalogLoader) async -> Result<CityCatalog, CityCatalogLoadError> {
         do {
             return .success(try await sut.load())
         } catch {
@@ -159,7 +159,7 @@ final class RemoteCityCatalogLoaderTests: XCTestCase {
     private func expect(
         _ sut: RemoteCityCatalogLoader,
         client: HTTPClientSpy,
-        toCompleteWith expectedResult: Result<CityCatalog, RemoteCityCatalogLoader.Error>,
+        toCompleteWith expectedResult: Result<CityCatalog, CityCatalogLoadError>,
         when action: @escaping () async -> Void,
         file: StaticString = #filePath,
         line: UInt = #line

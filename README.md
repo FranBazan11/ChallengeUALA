@@ -18,8 +18,8 @@ Un único proyecto Xcode (`ChallengeUALA.xcodeproj`, en la raíz del repo) con 3
 
 | Target | Tipo | Responsabilidad |
 |---|---|---|
-| `Cities` | Framework (macOS + iPhone) | Dominio agnóstico de plataforma: modelo de `City`, índice de búsqueda, protocolos (`FavoritesStore`). Multiplataforma para poder correr su suite en macOS sin bootear el simulador — el loop rápido de TDD. |
-| `CitiesiOS` | Framework (iPhone) | Vistas SwiftUI y view models. Separado del app target para que sus tests (snapshots incluidos) corran sin lanzar la app completa. |
+| `Cities` | Framework (macOS + iPhone) | Dominio agnóstico de plataforma: modelo de `City`, índice de búsqueda, protocolos (`FavoritesStore`), capa de red y presentación (`@Observable` view models, sin SwiftUI). Multiplataforma para poder correr su suite en macOS sin bootear el simulador — el loop rápido de TDD. |
+| `CitiesiOS` | Framework (iPhone) | Solo vistas SwiftUI, que observan los view models de `Cities`. Separado del app target para que sus tests (snapshots incluidos) corran sin lanzar la app completa. |
 | `ChallengeUALA` | App (iPhone) | Composition Root — el único lugar del proyecto que instancia y cablea dependencias concretas (SwiftData, URLSession, MapKit). |
 
 Cada uno de los tres tiene su target de tests (`CitiesTests`, `CitiesiOSTests`, `ChallengeUALATests`), más `ChallengeUALAUITests` para los flujos end-to-end de la app ensamblada.
@@ -28,10 +28,11 @@ Dentro de `Cities`, los archivos se agrupan por boundary, y `CitiesTests` espeja
 
 ```
 Cities/
-├── CityFeature/           Modelo de dominio
+├── CityFeature/           Modelo de dominio y el contrato CityCatalogLoader
 ├── CitySearch/            Índice de búsqueda por prefijo y binary search
-├── CityAPI/               Mapeo del JSON del catálogo, contrato HTTPClient y el use case Load City Catalog
+├── CityAPI/               Mapeo del JSON del catálogo, contrato HTTPClient y la implementación remota de CityCatalogLoader
 ├── CityAPIInfrastructure/ Implementación de HTTPClient con URLSession
+├── CityPresentation/      View models observables de la lista y de la celda
 └── CityFavorites/         Contrato de persistencia de favoritos
 ```
 
