@@ -28,10 +28,11 @@ Dentro de `Cities`, los archivos se agrupan por boundary, y `CitiesTests` espeja
 
 ```
 Cities/
-├── CityFeature/     Modelo de dominio
-├── CitySearch/      Índice de búsqueda por prefijo y binary search
-├── CityAPI/         Mapeo del JSON del catálogo y contrato de red
-└── CityFavorites/   Contrato de persistencia de favoritos
+├── CityFeature/           Modelo de dominio
+├── CitySearch/            Índice de búsqueda por prefijo y binary search
+├── CityAPI/               Mapeo del JSON del catálogo, contrato HTTPClient y el use case Load City Catalog
+├── CityAPIInfrastructure/ Implementación de HTTPClient con URLSession
+└── CityFavorites/         Contrato de persistencia de favoritos
 ```
 
 **Schemes:** `Cities`, `CitiesiOS` y `ChallengeUALA` son el loop de desarrollo día a día — cada uno corre solo su propia suite. `CI_iOS` es un scheme aparte que junta los 4 test targets de iOS (`CitiesTests` + `CitiesiOSTests` + `ChallengeUALATests` + `ChallengeUALAUITests`) en una sola corrida, que es lo que ejecuta el job de iOS del CI.
