@@ -1,6 +1,6 @@
 ---
 name: mr-review
-description: Use when a task-mr cycle has finished implementing and the working tree is ready for independent review before the user commits — dispatches specialized-lens subagents against the uncommitted diff, verifies the test suite is green, and hands off a Critical/Warning/Suggestion report.
+description: Use only when the user explicitly asks for an MR/code review of the current work (e.g. "/mr-review", "revisá esto antes de commitear"). Never self-invoke automatically when a task-mr cycle finishes or as an implicit gate in any other skill.
 ---
 
 # mr-review
@@ -9,7 +9,9 @@ Una revisión independiente del trabajo de una tarea, con varios lentes especial
 
 ## Cuándo usarla
 
-Al terminar el ciclo de `task-mr` (o cualquier tarea con cambios en la rama actual), antes de que el usuario revise y commitee. También sirve como chequeo intermedio a mitad de una tarea larga — en ese caso el lente 6 todavía no tiene una secuencia de commits propuesta que auditar, y un checklist parcialmente tildado no es un hallazgo por sí solo.
+**Solo por pedido explícito del usuario** — algo como "corré el mr-review", "revisá esto antes de que lo commitee" o invocar `/mr-review` directamente. Nunca se autoinvoca: ni el agente principal ni ninguna otra skill la dispara por su cuenta, aunque `task-mr` acabe de terminar su ciclo o "parezca" el momento ideal para una revisión. Que el trabajo esté listo para revisión es una condición necesaria, no suficiente — la que falta siempre es que el usuario la haya pedido.
+
+Cuando el usuario la pide, aplica igual de bien al final del ciclo de `task-mr` (o cualquier tarea con cambios en la rama actual) que como chequeo intermedio a mitad de una tarea larga — en ese caso el lente 6 todavía no tiene una secuencia de commits propuesta que auditar, y un checklist parcialmente tildado no es un hallazgo por sí solo.
 
 ## Pasos
 
