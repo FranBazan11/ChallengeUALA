@@ -240,6 +240,6 @@ Decisiones a documentar explícitamente (el enunciado las pide como "assumptions
 - [ ] Por qué el índice es un array ordenado + binary search, y no un trie
 - [ ] Por qué `searchKey` se precalcula una sola vez en vez de recalcular `.lowercased()` en cada comparación
 - [ ] Por qué el catálogo vive en memoria y no en SwiftData
-- [ ] Por qué SwiftData se usa solo para favoritos, y por qué está detrás de un protocolo `FavoritesStore`
+- [x] Por qué SwiftData se usa solo para favoritos, y por qué está detrás de un protocolo `FavoritesStore`
 - [ ] Por qué `verticalSizeClass` y no `horizontalSizeClass` / `NavigationSplitView`
 - [ ] Cualquier assumption sobre el formato/encoding del JSON del gist (incluida la cota `\u{FFFF}` del prefix range)

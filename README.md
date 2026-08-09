@@ -33,7 +33,8 @@ Cities/
 ├── CityAPI/               Mapeo del JSON del catálogo, contrato HTTPClient y la implementación remota de CityCatalogLoader
 ├── CityAPIInfrastructure/ Implementación de HTTPClient con URLSession
 ├── CityPresentation/      View models observables de la lista y de la celda
-└── CityFavorites/         Contrato de persistencia de favoritos
+├── CityFavorites/         Contrato de persistencia de favoritos
+└── CityFavoritesInfrastructure/ Implementación de FavoritesStore con SwiftData
 ```
 
 **Schemes:** `Cities`, `CitiesiOS` y `ChallengeUALA` son el loop de desarrollo día a día — cada uno corre solo su propia suite. `CI_iOS` es un scheme aparte que junta los 4 test targets de iOS (`CitiesTests` + `CitiesiOSTests` + `ChallengeUALATests` + `ChallengeUALAUITests`) en una sola corrida, que es lo que ejecuta el job de iOS del CI.
