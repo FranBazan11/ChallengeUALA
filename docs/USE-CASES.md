@@ -183,11 +183,11 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 
 ### Checklist
 
-- [ ] Marcar una ciudad no favorita la deja favorita
-- [ ] Desmarcar una ciudad favorita la deja no favorita
-- [ ] El estado persiste entre instancias del store (simulando reinicio de la app)
-- [ ] Alternar dos veces sobre la misma ciudad no genera estado inconsistente ni entradas duplicadas
-- [ ] El ViewModel depende del protocolo `FavoritesStore`, no de SwiftData directamente
+- [x] Marcar una ciudad no favorita la deja favorita
+- [x] Desmarcar una ciudad favorita la deja no favorita
+- [x] El estado persiste entre instancias del store (simulando reinicio de la app)
+- [x] Alternar dos veces sobre la misma ciudad no genera estado inconsistente ni entradas duplicadas
+- [x] El ViewModel depende del protocolo `FavoritesStore`, no de SwiftData directamente
 
 ---
 
@@ -217,10 +217,10 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 
 ### Checklist
 
-- [ ] Filtro de favoritos solo, sin prefijo
-- [ ] Filtro de favoritos combinado con un prefijo
-- [ ] Sin favoritos, el resultado es una lista vacía, no un error
-- [ ] Desactivar el filtro vuelve a mostrar el catálogo completo (filtrado por prefijo si corresponde)
+- [x] Filtro de favoritos solo, sin prefijo
+- [x] Filtro de favoritos combinado con un prefijo
+- [x] Sin favoritos, el resultado es una lista vacía, no un error
+- [x] Desactivar el filtro vuelve a mostrar el catálogo completo (filtrado por prefijo si corresponde)
 
 ---
 
@@ -380,3 +380,72 @@ El ViewModel depende del protocolo `CityCatalogLoader` (definido en `Cities/City
 - [x] El título combina nombre y código de país
 - [x] El subtítulo muestra latitud y longitud
 - [x] Dos ciudades con los mismos datos producen el mismo view model (`Equatable`)
+
+---
+
+## Historia 11 — Ver el catálogo sin conexión *(could-have, diferida)*
+
+> **No deriva de [REQUISITOS.md](REQUISITOS.md).** El enunciado pide descargar el catálogo del gist y no menciona funcionamiento offline en ningún punto; es más, aclara explícitamente que *"el tiempo de carga de la app no es tan importante"*, que es justo el argumento principal a favor de cachear. Lo único que el enunciado sí exige sobre persistencia —*"las ciudades favoritas deben recordarse entre lanzamientos de la app"*— ya está cubierto por la Historia 4.
+>
+> Esta historia queda escrita porque el agujero se detectó al cerrar el MR #5 y no queremos que se pierda, no porque sea trabajo comprometido. Es un *could-have* en los términos de [PLAN-TECNICO.md](PLAN-TECNICO.md) §2: entra solo si sobra tiempo después de los must-have, y no se toca si pone en riesgo alguno de ellos.
+
+**Como** usuario de la app
+**Quiero** ver el catálogo y mis ciudades favoritas aunque no tenga conexión
+**Para** poder usar la app en el subte, en un avión o con la red caída
+
+### El problema concreto que resuelve
+
+Hoy, sin conexión, la pantalla queda en el estado de error y no se ve **nada** — ni siquiera los favoritos ya guardados. No es que los favoritos se pierdan: están en SwiftData y se leen bien. Lo que falta es el catálogo. Como `FavoriteCity` guarda únicamente el `cityID`, sin catálogo no hay nombre ni coordenadas con qué dibujar una fila.
+
+### Escenarios
+
+- **Dado** que ya cargué el catálogo alguna vez, **cuando** abro la app sin conexión, **entonces** veo el catálogo cacheado y puedo buscar y filtrar favoritos con normalidad
+- **Dado** que nunca cargué el catálogo, **cuando** abro la app sin conexión, **entonces** veo el mensaje de error con "Reintentar" — el mismo comportamiento de hoy
+- **Dado** que tengo conexión, **cuando** la descarga termina bien, **entonces** el cache queda actualizado con lo recién descargado
+- **Dado** que el cache está corrupto o incompleto, **cuando** intento leerlo, **entonces** se trata como si no existiera — nunca un crash ni un catálogo a medias presentado como completo
+- **Dado** que tengo conexión, **cuando** la descarga falla a mitad de camino, **entonces** el cache anterior queda intacto, no pisado por datos parciales
+
+### Use Case: Load City Catalog With Fallback
+
+**Data (input):** ninguno — se dispara igual que la carga actual
+
+**Curso primario (happy path):**
+1. El sistema pide el catálogo remoto (Historia 3)
+2. El sistema guarda el catálogo obtenido en el cache, reemplazando el anterior
+3. El sistema entrega el catálogo
+
+**Curso alternativo — falla la red y hay cache:**
+1. El sistema recupera el catálogo del cache
+2. El sistema entrega ese catálogo, sin marcar error
+
+**Curso alternativo — falla la red y no hay cache (o está corrupto):**
+1. El sistema entrega el error de conectividad, igual que hoy
+
+**Curso alternativo — falla el guardado del cache:**
+1. El sistema entrega igual el catálogo recién descargado — no cachear es degradación aceptable, no un error que valga la pena mostrarle al usuario
+
+### Contrato
+
+El módulo `Cities` define un `CityCatalogCache` con dos operaciones: guardar un catálogo y recuperarlo. Lo define el dominio; la implementación sobre `FileManager` vive del lado de afuera, en `CityCatalogCacheInfrastructure/` — el mismo split que ya usan `CityAPI` / `CityAPIInfrastructure` para la red.
+
+La composición de "remoto con fallback al cache" es un `CityCatalogLoader` más, que envuelve a los otros dos y se arma en el Composition Root. Así ni el ViewModel ni `RemoteCityCatalogLoader` se enteran de que existe un cache: el ViewModel ya depende del protocolo `CityCatalogLoader` desde el MR #4, así que no cambia ni una línea.
+
+El MR #2 dejó esto preparado a propósito al decidir que el mapper reciba `Data` y no una URL ni una respuesta HTTP — *"la decisión de cachear el JSON a disco queda libre para más adelante sin tocar esta historia"*.
+
+**Qué se guarda:** el JSON crudo tal como llegó, no el catálogo indexado. El índice de búsqueda se reconstruye al cargar (12,9 ms medidos en el MR #2 sobre 200.000 ciudades), que es despreciable frente a la descarga de ~10 MB, y así el formato en disco es exactamente el mismo que el de la red — un solo mapper, un solo formato que mantener.
+
+**Por qué NO se denormaliza `FavoriteCity`:** guardar nombre y coordenadas dentro de cada favorito haría visibles los favoritos offline con mucho menos trabajo, pero dejaría el resto de la app rota igual (sin catálogo no hay búsqueda ni lista) y metería una copia parcial del catálogo que puede desincronizarse del original. Se resuelve el problema de fondo o no se resuelve.
+
+### Checklist
+
+- [ ] Una carga remota exitosa guarda el catálogo en el cache
+- [ ] Una carga remota exitosa entrega el catálogo aunque falle el guardado en cache
+- [ ] Un error de red con cache disponible entrega el catálogo cacheado, sin error
+- [ ] Un error de red sin cache entrega el error de conectividad
+- [ ] Un cache con datos inválidos se trata como cache ausente, sin crash
+- [ ] Un error de red con cache corrupto entrega el error de conectividad, no un catálogo parcial
+- [ ] Guardar sobre un cache existente lo reemplaza, sin duplicar ni mezclar
+- [ ] Recuperar del cache no produce side-effects (no lo borra, no lo reescribe)
+- [ ] La cancelación durante la carga se propaga igual que en la Historia 3
+- [ ] El ViewModel no cambia: sigue dependiendo solo de `CityCatalogLoader`
+- [ ] Verificación de punta a punta con la red real cortada, después de una carga exitosa previa
