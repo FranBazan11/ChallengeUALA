@@ -21,4 +21,9 @@ public struct CitySearchResults: RandomAccessCollection, Sendable {
     public subscript(position: Int) -> City {
         cities[entries[position].cityIndex]
     }
+
+    public func filter(byFavoriteIDs favoriteIDs: Set<Int>) -> CitySearchResults {
+        let favoriteEntries = entries.filter { favoriteIDs.contains(cities[$0.cityIndex].id) }
+        return CitySearchResults(cities: cities, entries: favoriteEntries[...])
+    }
 }
