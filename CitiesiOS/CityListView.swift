@@ -12,6 +12,7 @@ public struct CityListView: View {
     let viewModel: CityListViewModel
 
     @State private var searchText = ""
+    @State private var showsFavoritesOnly = false
     @State private var reloadToken = 0
 
     public init(viewModel: CityListViewModel) {
@@ -22,9 +23,16 @@ public struct CityListView: View {
         VStack(spacing: 0) {
             TextField("Filtrar por prefijo", text: $searchText)
                 .textFieldStyle(.roundedBorder)
-                .padding()
+                .padding(.horizontal)
+                .padding(.top)
                 .onChange(of: searchText) { _, newValue in
                     viewModel.search(prefix: newValue)
+                }
+
+            Toggle("Solo favoritos", isOn: $showsFavoritesOnly)
+                .padding()
+                .onChange(of: showsFavoritesOnly) { _, newValue in
+                    viewModel.setFavoritesOnly(newValue)
                 }
 
             content
@@ -46,11 +54,15 @@ public struct CityListView: View {
             if results.isEmpty {
                 Spacer()
                 Text("No encontramos ciudades para ese filtro")
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                 Spacer()
             } else {
                 List(results) { city in
-                    CityCellView(viewModel: CityCellViewModel(city: city))
+                    CityCellView(
+                        viewModel: CityCellViewModel(city: city, isFavorite: viewModel.isFavorite(city.id)),
+                        onToggleFavorite: { viewModel.toggleFavorite(cityID: city.id) }
+                    )
                 }
                 .listStyle(.plain)
             }
