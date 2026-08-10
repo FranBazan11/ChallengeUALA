@@ -6,6 +6,57 @@ Registro de cada MR cerrado, entradas más nuevas arriba. El objetivo es que qui
 
 ---
 
+## 2026-08-10 — MR #6: Paginar la lista para que no se trabe con 200.000 resultados
+
+**El síntoma.** Con el filtro vacío, el primer carácter tipeado congelaba la UI; de la segunda letra en adelante se escribía fluido (escribiendo "Albuquerque", trababa solo la "A"). El switch "Solo favoritos" tenía el mismo problema: se quedaba unos milisegundos sin moverse antes de cambiar de posición y mostrar la lista filtrada.
+
+**Qué se construyó.** `CitySearchResults.limited(to:)`, que acota un resultado de búsqueda sobre el slice existente sin copiar entradas; `CityListViewModel` con una ventana visible paginada (`pageSize` inyectado por initializer, default 50) que guarda el resultado completo puertas adentro y publica solo la ventana, más `showMoreResults(after:)` para agrandarla; `.onAppear` en la celda de `CityListView` como disparador. 13 tests nuevos (4 en `CitySearchResultsTests`, 8 en `CityListViewModelTests`, 1 de performance), sobre un total de 93 en `CitiesTests`, verdes en macOS y en el simulador de iOS (`CI_iOS`), en Debug y en Release. Historia 12 en `docs/USE-CASES.md`.
+
+**La causa raíz, y cómo se descartó lo que no era.** El camino de tecleo tiene un solo costo que escala con el catálogo, y no es la búsqueda. Medido sobre 200.000 ciudades (`CityCatalogPerformanceTests`, Debug, macOS arm64):
+
+| Medición | Tiempo |
+|---|---|
+| Búsqueda por prefijo, 6 teclas seguidas | **0,37 ms** (~0,06 ms por tecla) |
+| Filtro de favoritos **sin prefijo** | **14,4 ms** |
+| Construcción del índice (una vez, al cargar) | 195 ms |
+
+Con 0,06 ms por tecla en el dominio y la UI congelándose igual, el costo estaba en otro lado: `refreshResults()` publicaba el resultado **completo**, y con prefijo vacío eso son las 200.000 ciudades entregadas enteras a la `List`. Para actualizarse, SwiftUI resuelve la identidad de la colección vieja y la nueva y calcula el batch update contra el collection view que la respalda — un costo proporcional al tamaño de la colección **anterior**, en el main thread. De ahí la forma exacta del síntoma: `""` → `"A"` es 200.000 → ~5.000 y traba; `"A"` → `"Al"` es ~5.000 → ~700 y no.
+
+El diagnóstico se hizo **por eliminación sobre el código y con números medidos, antes de escribir una línea de fix**, no probando cambios a ver cuál pegaba. Dos hipótesis alternativas que se descartaron: que fuera el algoritmo de búsqueda (lo desmiente la medición, y también el hecho de que trabe solo la primera tecla — un binary search cuesta lo mismo en la primera que en la sexta), y que fuera la inicialización del teclado en el primer carácter (lo desmiente que el switch de favoritos, que no toca el teclado, tenga el mismo síntoma).
+
+**Dos defectos más del mismo origen, encontrados en el camino.**
+- **`toggleFavorite` republicaba la colección entera aunque el filtro de favoritos estuviera apagado.** La estrella de la celda se dibuja leyendo `viewModel.isFavorite(city.id)`, que ya es reactivo por `@Observable`: con el filtro apagado la lista visible no cambia, así que ese `refreshResults()` no servía para nada más que forzar un diff de 200.000 en cada tap de estrella. Ahora `toggleFavorite` recalcula **solo** si el filtro está prendido.
+- **La bitácora del MR #5 tiene una afirmación con un agujero.** Decía que el `.filter` de favoritos *"corre sobre el rango ya acotado por el prefijo, no sobre las 200.000"*. Es cierto **solo si hay prefijo**: con el filtro de texto vacío el rango *son* las 200.000, que es justo el escenario del síntoma reportado. Queda corregido acá.
+
+**Decisiones.**
+- **Paginar, no debouncear.** Un debounce no elimina el trabajo, lo demora: la primera tecla seguiría pagando el diff de 200.000, solo que más tarde, y encima incumpliría el requisito textual de que *"la lista debe actualizarse con cada carácter agregado/eliminado"*. Paginar acota el costo de **toda** transición al tamaño de una página, y de paso arregla también el render inicial, el borrado hasta filtro vacío y el tap en la estrella — cuatro síntomas con un solo cambio.
+- **La ventana se resetea cuando cambia la consulta, y se conserva cuando cambia solo el conjunto de favoritos.** Sin esa distinción, marcar una estrella en la fila 300 te devolvía al principio de la lista. Es la clase de regresión que la paginación introduce si se implementa sin pensarla, y tiene test propio.
+- **`pageSize` se inyecta por initializer con default 50, en vez de ser una constante privada.** No es un knob de producto: es lo que permite que los tests de paginación usen catálogos de 4 ciudades en vez de tener que construir 51 para probar que la segunda página existe. El Composition Root no lo pasa — se queda con el default.
+- **La paginación vive en presentación, no en dominio.** `CityCatalog` sigue devolviendo el rango completo de coincidencias y `CitySearchResults` solo suma `limited(to:)`, que se resuelve con `entries.prefix(_:)` sobre el `ArraySlice` que ya existía — sin copiar entradas, mismo zero-copy del MR #2. Cuántas filas se muestran es una decisión de la vista, no del catálogo.
+- **La vista no decide cuándo pedir más.** El `.onAppear` de la celda solo avisa qué fila apareció; el criterio ("¿es la última visible? ¿queda algo más?") está entero en `showMoreResults(after:)`. Si una página no llena la pantalla (landscape, iPad), el `onAppear` de la última fila dispara la siguiente enseguida y se autocorrige solo.
+- **Verificación A/B contra la app real, no solo tests.** Con un test de UI temporal —descartado después, no forma parte de este MR— sobre la app compilada contra el gist real, midiendo las mismas interacciones dos veces: una con `pageSize: 50` y otra con `pageSize: .max`, que reproduce **exactamente** el comportamiento previo sin tocar git ni revertir nada.
+
+  | Interacción | Sin paginar | Paginado |
+  |---|---|---|
+  | Primera tecla "A", filtro vacío | 772 ms | 525 ms |
+  | Resto de "lbuquerque" | 826 ms | 452 ms |
+  | Borrar hasta filtro vacío | 591 ms | 441 ms |
+  | Toggle favoritos ON, sin prefijo | 2171 ms | 1633 ms |
+  | Toggle favoritos OFF | 1769 ms | 1603 ms |
+
+  **Los absolutos no significan lo que parecen y no hay que leerlos como tiempo de freeze:** XCUITest tiene un piso fijo de ~440 ms por interacción de tecleo y ~1,6 s para un tap por coordenada, que es lo que cuesta resolver el snapshot de accesibilidad, no lo que tarda la app. Lo que sí es señal limpia es el **delta**, y sobre todo esto: sin paginar, prender el filtro de favoritos costaba ~400 ms más que apagarlo; con paginación los dos cuestan lo mismo. Esa asimetría era el diff de las 200.000, y desapareció. El scroll se verificó aparte: al arrancar la última celda visible es "A Dos Francos, PT" y tras 8 swipes es "Abanades, ES", así que las páginas siguen cargando.
+- **Una trampa metodológica propia, detectada y corregida.** La primera versión del test de verificación medía el toggle **sin ningún favorito marcado**, así que al prenderlo la lista quedaba vacía y lo que el cronómetro medía era XCUITest reintentando sobre una celda inexistente — 1670 ms idénticos en las dos variantes, un empate falso que hacía parecer que el fix no tocaba el toggle. La versión final marca un favorito antes de medir, y ahí sí aparece la diferencia.
+
+**Qué se descartó.**
+- **Debounce sobre el `TextField`** — ver arriba: demora el trabajo en vez de eliminarlo, y choca con el requisito de actualizar en cada carácter.
+- **Mover la búsqueda a background con `Task` cancelable**, como proponía `PLAN-TECNICO.md` §1.2. Con 0,06 ms por tecla medidos, mandar eso a otro actor agrega dos saltos de contexto y la posibilidad de resultados viejos pisando a los nuevos, para ahorrar un tiempo que no se puede percibir. El plan técnico escribió esa mitigación **antes** de tener números; los números la volvieron innecesaria. Si algún día el catálogo creciera un orden de magnitud, se revisita.
+- **Romper la identidad de la `List` con `.id(...)` en cada cambio de consulta**, para que SwiftUI reconstruya en vez de diffear. Es un cambio más chico y localizado, pero deja el costo latente (la primera construcción de 200.000 identidades se sigue pagando), resetea la posición de scroll en cada tecleo, y mata las animaciones de la lista. Paginar ataca el problema de fondo: la `List` nunca ve más de una página.
+- **Desactivar la animación implícita con un `Transaction`** — misma familia que lo anterior: reduce el costo del batch update pero no el de resolver 200.000 identidades.
+- **Darle a los favoritos su propio `CityCatalog` chico**, para que el modo "solo favoritos" sea O(log f) en vez del scan O(200.000) que hace `filter(byFavoriteIDs:)`. Se decidió **medir antes de construir**: los 14,4 ms del scan quedan documentados arriba con un test de performance que los vigila. Es real pero secundario frente al diff de la `List`, y arreglarlo bien implica un mapa `id → índice` sobre el catálogo entero y cambiar `toggleFavorite` para que reciba la `City` y no solo el id. Queda como MR aparte, con el número que lo justificaría ya en el repo. **Disparador para revisitarlo:** si el filtro de favoritos vuelve a sentirse pesado en un dispositivo real, o si la Historia 11 (catálogo offline) necesita los `City` de los favoritos igual, ahí el cambio se paga solo.
+- **Mostrar el estado vacío con "empezá a escribir" en vez de las 200.000 con el filtro vacío.** Esquiva el problema entero con dos líneas, pero contradice el wireframe del enunciado, que muestra la lista poblada con el filtro vacío.
+
+---
+
 ## 2026-08-09 — MR #5: Favoritos — persistencia con SwiftData, toggle y filtro "solo favoritos"
 
 **Qué se construyó.** Además del arreglo del teclado descrito más abajo: el protocolo `FavoritesStore` (`Cities/CityFavorites/`), con `loadFavoriteIDs()` y `setFavorite(_:isFavorite:)`, más `InMemoryFavoritesStore` al lado como implementación de fallback; `FavoriteCity` (`@Model`, `internal`) y `SwiftDataFavoritesStore` (`Cities/CityFavoritesInfrastructure/`), la implementación con SwiftData; `CitySearchResults.filter(byFavoriteIDs:)`, que interseca un resultado de búsqueda con el conjunto de favoritos sin salirse del tipo existente; `CityListViewModel` con `toggleFavorite(cityID:)`, `setFavoritesOnly(_:)`, `isFavorite(_:)` y un `refreshResults()` privado que centraliza prefijo + favoritos; `CityCellViewModel.isFavorite`; el botón de estrella en `CityCellView` y el toggle "Solo favoritos" en `CityListView`; y el cableado en `CompositionRoot`. 31 tests nuevos (6 en `CitySearchResultsTests`, 7 en `SwiftDataFavoritesStoreTests`, 4 en `InMemoryFavoritesStoreTests`, 2 en `CityCellViewModelTests`, 12 en `CityListViewModelTests`), sobre un total de 80 en `CitiesTests`, verdes en macOS y en el simulador de iOS (`CI_iOS`, Debug y Release), más verificación contra la app real corriendo con SwiftData de verdad (ver abajo). Sumando los 2 tests de UI del teclado, `CI_iOS` queda en 87.
