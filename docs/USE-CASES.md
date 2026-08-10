@@ -36,6 +36,7 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 - **Dado** el catálogo cargado, **cuando** el filtro queda vacío, **entonces** veo el catálogo completo, ordenado
 - **Dado** el catálogo cargado, **cuando** escribo un prefijo sin coincidencias, **entonces** veo el estado vacío
 - **Dado** que estoy escribiendo, **cuando** agrego o borro un carácter, **entonces** la lista se actualiza con cada cambio, sin trabarse
+- **Dado** que el teclado está abierto porque toqué el filtro, **cuando** toco cualquier otra parte de la pantalla o scrolleo la lista, **entonces** el teclado se esconde y el texto del filtro se conserva
 
 ### Use Case: Search Cities By Prefix
 
@@ -66,6 +67,8 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 - [x] Orden final: ciudad y después país (`"Denver, US"` antes que `"Sydney, AU"`)
 - [x] Cada carácter agregado o borrado actualiza la lista de forma síncrona — 0,36 µs medidos en el MR #2 sobre 200.000 ciudades hacen innecesario un `Task` por tecla
 - [x] La cancelación aplica al `Task` de carga del catálogo, no a la búsqueda — ver Historia 9
+- [x] Tocar fuera del campo de filtro esconde el teclado *(agregado en el MR #5)*
+- [x] Esconder el teclado conserva el texto del filtro y los resultados vigentes *(agregado en el MR #5)*
 
 ---
 
@@ -183,11 +186,11 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 
 ### Checklist
 
-- [ ] Marcar una ciudad no favorita la deja favorita
-- [ ] Desmarcar una ciudad favorita la deja no favorita
-- [ ] El estado persiste entre instancias del store (simulando reinicio de la app)
-- [ ] Alternar dos veces sobre la misma ciudad no genera estado inconsistente ni entradas duplicadas
-- [ ] El ViewModel depende del protocolo `FavoritesStore`, no de SwiftData directamente
+- [x] Marcar una ciudad no favorita la deja favorita
+- [x] Desmarcar una ciudad favorita la deja no favorita
+- [x] El estado persiste entre instancias del store (simulando reinicio de la app)
+- [x] Alternar dos veces sobre la misma ciudad no genera estado inconsistente ni entradas duplicadas
+- [x] El ViewModel depende del protocolo `FavoritesStore`, no de SwiftData directamente
 
 ---
 
@@ -217,10 +220,10 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 
 ### Checklist
 
-- [ ] Filtro de favoritos solo, sin prefijo
-- [ ] Filtro de favoritos combinado con un prefijo
-- [ ] Sin favoritos, el resultado es una lista vacía, no un error
-- [ ] Desactivar el filtro vuelve a mostrar el catálogo completo (filtrado por prefijo si corresponde)
+- [x] Filtro de favoritos solo, sin prefijo
+- [x] Filtro de favoritos combinado con un prefijo
+- [x] Sin favoritos, el resultado es una lista vacía, no un error
+- [x] Desactivar el filtro vuelve a mostrar el catálogo completo (filtrado por prefijo si corresponde)
 
 ---
 
@@ -322,6 +325,7 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 - **Dado** que no tengo conectividad o el servidor responde mal, **cuando** la carga falla, **entonces** veo un mensaje de error claro y un botón para reintentar
 - **Dado** que la carga falló, **cuando** toco "Reintentar", **entonces** vuelvo a ver el indicador de carga y se dispara una nueva carga
 - **Dado** que estoy cargando, **cuando** la carga se cancela (por ejemplo, me voy de la pantalla), **entonces** no se muestra ningún error
+- **Dado** que el catálogo tarda en mapearse e indexarse, **cuando** la carga está en curso, **entonces** la UI sigue respondiendo — el trabajo del loader no corre en el hilo de UI
 
 ### Use Case: Present City Catalog Load
 
@@ -343,6 +347,8 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 
 El ViewModel depende del protocolo `CityCatalogLoader` (definido en `Cities/CityFeature/`, junto al modelo de dominio), no del tipo concreto `RemoteCityCatalogLoader` — así el test del ViewModel usa un stub en memoria, y la implementación de red se prueba aparte, como ya hace la Historia 3.
 
+El requirement `load()` del protocolo lleva `@concurrent`: con `SWIFT_APPROACHABLE_CONCURRENCY` activo (`NonisolatedNonsendingByDefault`), una función `async` sin esa marca hereda el aislamiento de quien la llama, y quien llama a `load()` es `CityListViewModel`, que es `@MainActor`. `@concurrent` es el opt-in explícito para que el mapeo del JSON y la construcción del índice de búsqueda corran fuera del hilo de UI.
+
 ### Checklist
 
 - [x] Estado inicial "cargando" antes de que la primera carga resuelva
@@ -351,6 +357,7 @@ El ViewModel depende del protocolo `CityCatalogLoader` (definido en `Cities/City
 - [x] Datos inválidos deja el estado en "error" con un mensaje
 - [x] Reintentar (una nueva llamada a cargar) puede resolver en "cargado" después de una falla previa
 - [x] Cancelación no produce un estado de error
+- [x] Cargar desde un llamador @MainActor no corre el trabajo del loader en el hilo de UI
 
 ---
 
@@ -380,3 +387,141 @@ El ViewModel depende del protocolo `CityCatalogLoader` (definido en `Cities/City
 - [x] El título combina nombre y código de país
 - [x] El subtítulo muestra latitud y longitud
 - [x] Dos ciudades con los mismos datos producen el mismo view model (`Equatable`)
+
+---
+
+## Historia 11 — Ver el catálogo sin conexión *(could-have, diferida)*
+
+> **No deriva de [REQUISITOS.md](REQUISITOS.md).** El enunciado pide descargar el catálogo del gist y no menciona funcionamiento offline en ningún punto; es más, aclara explícitamente que *"el tiempo de carga de la app no es tan importante"*, que es justo el argumento principal a favor de cachear. Lo único que el enunciado sí exige sobre persistencia —*"las ciudades favoritas deben recordarse entre lanzamientos de la app"*— ya está cubierto por la Historia 4.
+>
+> Esta historia queda escrita porque el agujero se detectó al cerrar el MR #5 y no queremos que se pierda, no porque sea trabajo comprometido. Es un *could-have* en los términos de [PLAN-TECNICO.md](PLAN-TECNICO.md) §2: entra solo si sobra tiempo después de los must-have, y no se toca si pone en riesgo alguno de ellos.
+
+**Como** usuario de la app
+**Quiero** ver el catálogo y mis ciudades favoritas aunque no tenga conexión
+**Para** poder usar la app en el subte, en un avión o con la red caída
+
+### El problema concreto que resuelve
+
+Hoy, sin conexión, la pantalla queda en el estado de error y no se ve **nada** — ni siquiera los favoritos ya guardados. No es que los favoritos se pierdan: están en SwiftData y se leen bien. Lo que falta es el catálogo. Como `FavoriteCity` guarda únicamente el `cityID`, sin catálogo no hay nombre ni coordenadas con qué dibujar una fila.
+
+### Escenarios
+
+- **Dado** que ya cargué el catálogo alguna vez, **cuando** abro la app sin conexión, **entonces** veo el catálogo cacheado y puedo buscar y filtrar favoritos con normalidad
+- **Dado** que nunca cargué el catálogo, **cuando** abro la app sin conexión, **entonces** veo el mensaje de error con "Reintentar" — el mismo comportamiento de hoy
+- **Dado** que tengo conexión, **cuando** la descarga termina bien, **entonces** el cache queda actualizado con lo recién descargado
+- **Dado** que el cache está corrupto o incompleto, **cuando** intento leerlo, **entonces** se trata como si no existiera — nunca un crash ni un catálogo a medias presentado como completo
+- **Dado** que tengo conexión, **cuando** la descarga falla a mitad de camino, **entonces** el cache anterior queda intacto, no pisado por datos parciales
+
+### Use Case: Load City Catalog With Fallback
+
+**Data (input):** ninguno — se dispara igual que la carga actual
+
+**Curso primario (happy path):**
+1. El sistema pide el catálogo remoto (Historia 3)
+2. El sistema guarda el catálogo obtenido en el cache, reemplazando el anterior
+3. El sistema entrega el catálogo
+
+**Curso alternativo — falla la red y hay cache:**
+1. El sistema recupera el catálogo del cache
+2. El sistema entrega ese catálogo, sin marcar error
+
+**Curso alternativo — falla la red y no hay cache (o está corrupto):**
+1. El sistema entrega el error de conectividad, igual que hoy
+
+**Curso alternativo — falla el guardado del cache:**
+1. El sistema entrega igual el catálogo recién descargado — no cachear es degradación aceptable, no un error que valga la pena mostrarle al usuario
+
+### Contrato
+
+El módulo `Cities` define un `CityCatalogCache` con dos operaciones: guardar un catálogo y recuperarlo. Lo define el dominio; la implementación sobre `FileManager` vive del lado de afuera, en `CityCatalogCacheInfrastructure/` — el mismo split que ya usan `CityAPI` / `CityAPIInfrastructure` para la red.
+
+La composición de "remoto con fallback al cache" es un `CityCatalogLoader` más, que envuelve a los otros dos y se arma en el Composition Root. Así ni el ViewModel ni `RemoteCityCatalogLoader` se enteran de que existe un cache: el ViewModel ya depende del protocolo `CityCatalogLoader` desde el MR #4, así que no cambia ni una línea.
+
+El MR #2 dejó esto preparado a propósito al decidir que el mapper reciba `Data` y no una URL ni una respuesta HTTP — *"la decisión de cachear el JSON a disco queda libre para más adelante sin tocar esta historia"*.
+
+**Qué se guarda:** el JSON crudo tal como llegó, no el catálogo indexado. El índice de búsqueda se reconstruye al cargar (12,9 ms medidos en el MR #2 sobre 200.000 ciudades), que es despreciable frente a la descarga de ~10 MB, y así el formato en disco es exactamente el mismo que el de la red — un solo mapper, un solo formato que mantener.
+
+**Por qué NO se denormaliza `FavoriteCity`:** guardar nombre y coordenadas dentro de cada favorito haría visibles los favoritos offline con mucho menos trabajo, pero dejaría el resto de la app rota igual (sin catálogo no hay búsqueda ni lista) y metería una copia parcial del catálogo que puede desincronizarse del original. Se resuelve el problema de fondo o no se resuelve.
+
+### Checklist
+
+- [ ] Una carga remota exitosa guarda el catálogo en el cache
+- [ ] Una carga remota exitosa entrega el catálogo aunque falle el guardado en cache
+- [ ] Un error de red con cache disponible entrega el catálogo cacheado, sin error
+- [ ] Un error de red sin cache entrega el error de conectividad
+- [ ] Un cache con datos inválidos se trata como cache ausente, sin crash
+- [ ] Un error de red con cache corrupto entrega el error de conectividad, no un catálogo parcial
+- [ ] Guardar sobre un cache existente lo reemplaza, sin duplicar ni mezclar
+- [ ] Recuperar del cache no produce side-effects (no lo borra, no lo reescribe)
+- [ ] La cancelación durante la carga se propaga igual que en la Historia 3
+- [ ] El ViewModel no cambia: sigue dependiendo solo de `CityCatalogLoader`
+- [ ] Verificación de punta a punta con la red real cortada, después de una carga exitosa previa
+
+---
+
+## Historia 12 — Mantener la lista fluida con 200.000 resultados
+
+**Deriva de [REQUISITOS.md](REQUISITOS.md):** *"La UI debe ser lo más responsiva posible mientras se escribe en el filtro"* y *"la lista debe actualizarse con cada carácter agregado/eliminado del filtro"*. Las Historias 1 y 5 dejaron esos dos requisitos correctos en resultado pero no en tiempo de respuesta.
+
+**Como** usuario del catálogo
+**Quiero** que la lista responda sin trabarse aunque haya 200.000 resultados
+**Para** poder escribir y filtrar sin esperar a que la app se descongele
+
+### El problema concreto que resuelve
+
+Con el filtro de texto vacío, la búsqueda devuelve las 200.000 ciudades y el ViewModel se las entrega enteras a la `List`. Actualizar la lista obliga entonces a SwiftUI a resolver la identidad de la colección vieja y la nueva y a calcular el batch update contra el collection view que la respalda: un costo proporcional al tamaño de la colección **anterior**, pagado en el main thread.
+
+Eso explica la forma exacta del síntoma. Escribiendo "Albuquerque" desde el filtro vacío, solo traba la "A" (200.000 → ~5.000); de la segunda letra en adelante se escribe fluido (~5.000 → ~700). Lo mismo con el switch "Solo favoritos" sin prefijo (200.000 → un puñado), y lo mismo al borrar hasta volver a filtro vacío.
+
+No es el algoritmo de búsqueda: medido sobre 200.000 ciudades, tipear seis caracteres seguidos cuesta **0,37 ms en total** (~0,06 ms por tecla). El costo que se siente no está en el dominio.
+
+### Escenarios
+
+- **Dado** el filtro vacío con las 200.000 ciudades a la vista, **cuando** escribo el primer carácter, **entonces** la lista se actualiza sin trabarse
+- **Dado** un prefijo escrito, **cuando** lo borro hasta dejar el filtro vacío, **entonces** la lista se actualiza sin trabarse
+- **Dado** el filtro vacío, **cuando** activo o desactivo "Solo favoritos", **entonces** el switch cambia de posición al instante y la lista se actualiza sin trabarse
+- **Dado** que scrolleé hasta el fondo de los resultados visibles, **cuando** sigo scrolleando, **entonces** aparecen más resultados sin cortes ni saltos
+- **Dado** que scrolleé lejos del principio, **cuando** marco una ciudad como favorita, **entonces** la lista no vuelve al principio
+
+### Use Case: Present Visible City Page
+
+**Data (input):** prefijo actual, flag "solo favoritos", conjunto de IDs favoritos, pedido de más resultados
+
+**Curso primario (happy path):**
+1. El sistema resuelve los resultados que coinciden con la consulta vigente
+2. El sistema entrega solo la primera página de esos resultados
+3. El sistema recuerda cuántos resultados dejó visibles
+
+**Curso alternativo — se pide más al llegar al final de lo visible:**
+1. El sistema amplía la ventana visible en una página
+2. El sistema entrega la ventana ampliada, sin recalcular la consulta
+
+**Curso alternativo — se pide más con todos los resultados ya visibles:**
+1. El sistema no cambia nada
+
+**Curso alternativo — cambia la consulta (prefijo o flag de favoritos):**
+1. El sistema vuelve a la primera página
+
+**Curso alternativo — cambia solo el conjunto de favoritos (marcar/desmarcar):**
+1. El sistema conserva la ventana visible — el usuario no pierde su lugar en la lista
+2. Con el filtro de favoritos apagado, la lista visible no cambia: solo cambia el ícono de la celda
+
+### Contrato
+
+La paginación es una decisión de presentación, no de dominio: `CityCatalog` sigue devolviendo el rango completo de coincidencias, y `CitySearchResults` solo suma la operación de acotarlo (`limited(to:)`), que se resuelve sobre el slice existente sin copiar entradas. `CityListViewModel` guarda el resultado completo puertas adentro y publica la ventana; la vista no decide cuándo pedir más, solo avisa qué fila apareció.
+
+**Por qué paginar y no debouncear.** Un debounce no elimina el trabajo, lo demora: la primera tecla seguiría pagando el diff de 200.000, solo que más tarde, y encima incumpliría *"la lista debe actualizarse con cada carácter"*. Paginar acota el costo de **toda** transición al tamaño de una página.
+
+### Checklist
+
+- [x] Una búsqueda con más resultados que el tamaño de página entrega solo la primera página
+- [x] Pedir más sobre la última fila visible agrega la página siguiente
+- [x] Pedir más sobre una fila que no es la última no cambia nada
+- [x] Pedir más con todos los resultados ya visibles no cambia nada
+- [x] Un prefijo nuevo vuelve la ventana a la primera página
+- [x] Cambiar el flag "solo favoritos" vuelve la ventana a la primera página
+- [x] Marcar un favorito con el filtro apagado conserva la ventana
+- [x] Marcar un favorito con el filtro apagado no republica la lista
+- [x] Marcar un favorito con el filtro prendido conserva la ventana y actualiza la lista
+- [x] `limited(to:)` acota respetando el orden, y con un tope mayor al total entrega todo
+- [x] Verificación en la app real contra el gist: primera tecla, borrado hasta vacío, toggle sin prefijo y scroll hasta el fondo, sin trabas

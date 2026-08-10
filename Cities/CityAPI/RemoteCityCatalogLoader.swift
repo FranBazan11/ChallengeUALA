@@ -17,6 +17,7 @@ public struct RemoteCityCatalogLoader: CityCatalogLoader {
         self.client = client
     }
 
+    @concurrent
     public func load() async throws(CityCatalogLoadError) -> CityCatalog {
         let data: Data
         let response: HTTPURLResponse

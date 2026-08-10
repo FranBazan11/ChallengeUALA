@@ -21,4 +21,13 @@ public struct CitySearchResults: RandomAccessCollection, Sendable {
     public subscript(position: Int) -> City {
         cities[entries[position].cityIndex]
     }
+
+    public func limited(to maxCount: Int) -> CitySearchResults {
+        CitySearchResults(cities: cities, entries: entries.prefix(maxCount))
+    }
+
+    public func filter(byFavoriteIDs favoriteIDs: Set<Int>) -> CitySearchResults {
+        let favoriteEntries = entries.filter { favoriteIDs.contains(cities[$0.cityIndex].id) }
+        return CitySearchResults(cities: cities, entries: favoriteEntries[...])
+    }
 }

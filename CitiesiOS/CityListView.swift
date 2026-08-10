@@ -12,7 +12,9 @@ public struct CityListView: View {
     let viewModel: CityListViewModel
 
     @State private var searchText = ""
+    @State private var showsFavoritesOnly = false
     @State private var reloadToken = 0
+    @FocusState private var isFilterFocused: Bool
 
     public init(viewModel: CityListViewModel) {
         self.viewModel = viewModel
@@ -22,13 +24,31 @@ public struct CityListView: View {
         VStack(spacing: 0) {
             TextField("Filtrar por prefijo", text: $searchText)
                 .textFieldStyle(.roundedBorder)
-                .padding()
+                .focused($isFilterFocused)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.done)
+                .padding(.horizontal)
+                .padding(.top)
                 .onChange(of: searchText) { _, newValue in
                     viewModel.search(prefix: newValue)
+                }
+                .onSubmit {
+                    isFilterFocused = false
+                }
+
+            Toggle("Solo favoritos", isOn: $showsFavoritesOnly)
+                .padding()
+                .onChange(of: showsFavoritesOnly) { _, newValue in
+                    viewModel.setFavoritesOnly(newValue)
                 }
 
             content
         }
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded {
+            isFilterFocused = false
+        })
         .task(id: reloadToken) {
             await viewModel.load()
         }
@@ -46,13 +66,19 @@ public struct CityListView: View {
             if results.isEmpty {
                 Spacer()
                 Text("No encontramos ciudades para ese filtro")
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                 Spacer()
             } else {
                 List(results) { city in
-                    CityCellView(viewModel: CityCellViewModel(city: city))
+                    CityCellView(
+                        viewModel: CityCellViewModel(city: city, isFavorite: viewModel.isFavorite(city.id)),
+                        onToggleFavorite: { viewModel.toggleFavorite(cityID: city.id) }
+                    )
+                    .onAppear { viewModel.showMoreResults(after: city.id) }
                 }
                 .listStyle(.plain)
+                .scrollDismissesKeyboard(.immediately)
             }
 
         case let .failed(message):

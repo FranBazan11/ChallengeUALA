@@ -24,19 +24,29 @@ public final class CityListViewModel: Sendable {
     public private(set) var state: State = .loading
 
     private let loader: CityCatalogLoader
+    private let favoritesStore: FavoritesStore
+    private let pageSize: Int
     private var catalog: CityCatalog?
+    private var matchingResults: CitySearchResults?
+    private var visibleCount: Int
     private var currentPrefix = ""
+    private var favoriteIDs: Set<Int>
+    private var showsFavoritesOnly = false
 
-    public init(loader: CityCatalogLoader) {
+    public init(loader: CityCatalogLoader, favoritesStore: FavoritesStore, pageSize: Int = 50) {
         self.loader = loader
+        self.favoritesStore = favoritesStore
+        self.pageSize = pageSize
+        visibleCount = pageSize
+        favoriteIDs = favoritesStore.loadFavoriteIDs()
     }
 
     public func load() async {
         state = .loading
+        visibleCount = pageSize
         do throws(CityCatalogLoadError) {
-            let loadedCatalog = try await loader.load()
-            catalog = loadedCatalog
-            state = .loaded(loadedCatalog.search(prefix: currentPrefix))
+            catalog = try await loader.load()
+            refreshResults()
         } catch {
             switch error {
             case .cancelled:
@@ -51,7 +61,52 @@ public final class CityListViewModel: Sendable {
 
     public func search(prefix: String) {
         currentPrefix = prefix
+        visibleCount = pageSize
+        refreshResults()
+    }
+
+    public func setFavoritesOnly(_ showsFavoritesOnly: Bool) {
+        self.showsFavoritesOnly = showsFavoritesOnly
+        visibleCount = pageSize
+        refreshResults()
+    }
+
+    public func toggleFavorite(cityID: Int) {
+        let isFavorite = !favoriteIDs.contains(cityID)
+        favoritesStore.setFavorite(cityID, isFavorite: isFavorite)
+        if isFavorite {
+            favoriteIDs.insert(cityID)
+        } else {
+            favoriteIDs.remove(cityID)
+        }
+        guard showsFavoritesOnly else { return }
+        refreshResults()
+    }
+
+    public func showMoreResults(after cityID: Int) {
+        guard
+            let matchingResults,
+            visibleCount < matchingResults.count,
+            matchingResults.limited(to: visibleCount).last?.id == cityID
+        else { return }
+
+        visibleCount += pageSize
+        publishVisibleResults()
+    }
+
+    public func isFavorite(_ cityID: Int) -> Bool {
+        favoriteIDs.contains(cityID)
+    }
+
+    private func refreshResults() {
         guard let catalog else { return }
-        state = .loaded(catalog.search(prefix: prefix))
+        let results = catalog.search(prefix: currentPrefix)
+        matchingResults = showsFavoritesOnly ? results.filter(byFavoriteIDs: favoriteIDs) : results
+        publishVisibleResults()
+    }
+
+    private func publishVisibleResults() {
+        guard let matchingResults else { return }
+        state = .loaded(matchingResults.limited(to: visibleCount))
     }
 }

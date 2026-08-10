@@ -30,9 +30,20 @@ final class CityCatalogPerformanceTests: XCTestCase {
         }
     }
 
+    func test_filteringFavorites_withoutPrefix_over200kCities() {
+        let catalog = CityCatalog(cities: makeLargeCityList())
+        let favoriteIDs = Set((0..<favoriteCount).map { $0 * (catalogSize / favoriteCount) })
+
+        measure {
+            let results = catalog.search(prefix: "").filter(byFavoriteIDs: favoriteIDs)
+            _ = results.prefix(visibleRowsOnScreen).map(\.name)
+        }
+    }
+
     // MARK: - Helpers
 
     private let catalogSize = 200_000
+    private let favoriteCount = 20
     private let visibleRowsOnScreen = 50
 
     private func makeLargeCityList() -> [City] {
