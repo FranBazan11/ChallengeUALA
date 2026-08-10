@@ -25,19 +25,25 @@ public final class CityListViewModel: Sendable {
 
     private let loader: CityCatalogLoader
     private let favoritesStore: FavoritesStore
+    private let pageSize: Int
     private var catalog: CityCatalog?
+    private var matchingResults: CitySearchResults?
+    private var visibleCount: Int
     private var currentPrefix = ""
     private var favoriteIDs: Set<Int>
     private var showsFavoritesOnly = false
 
-    public init(loader: CityCatalogLoader, favoritesStore: FavoritesStore) {
+    public init(loader: CityCatalogLoader, favoritesStore: FavoritesStore, pageSize: Int = 50) {
         self.loader = loader
         self.favoritesStore = favoritesStore
+        self.pageSize = pageSize
+        visibleCount = pageSize
         favoriteIDs = favoritesStore.loadFavoriteIDs()
     }
 
     public func load() async {
         state = .loading
+        visibleCount = pageSize
         do throws(CityCatalogLoadError) {
             catalog = try await loader.load()
             refreshResults()
@@ -55,11 +61,13 @@ public final class CityListViewModel: Sendable {
 
     public func search(prefix: String) {
         currentPrefix = prefix
+        visibleCount = pageSize
         refreshResults()
     }
 
     public func setFavoritesOnly(_ showsFavoritesOnly: Bool) {
         self.showsFavoritesOnly = showsFavoritesOnly
+        visibleCount = pageSize
         refreshResults()
     }
 
@@ -71,7 +79,19 @@ public final class CityListViewModel: Sendable {
         } else {
             favoriteIDs.remove(cityID)
         }
+        guard showsFavoritesOnly else { return }
         refreshResults()
+    }
+
+    public func showMoreResults(after cityID: Int) {
+        guard
+            let matchingResults,
+            visibleCount < matchingResults.count,
+            matchingResults.limited(to: visibleCount).last?.id == cityID
+        else { return }
+
+        visibleCount += pageSize
+        publishVisibleResults()
     }
 
     public func isFavorite(_ cityID: Int) -> Bool {
@@ -81,6 +101,12 @@ public final class CityListViewModel: Sendable {
     private func refreshResults() {
         guard let catalog else { return }
         let results = catalog.search(prefix: currentPrefix)
-        state = .loaded(showsFavoritesOnly ? results.filter(byFavoriteIDs: favoriteIDs) : results)
+        matchingResults = showsFavoritesOnly ? results.filter(byFavoriteIDs: favoriteIDs) : results
+        publishVisibleResults()
+    }
+
+    private func publishVisibleResults() {
+        guard let matchingResults else { return }
+        state = .loaded(matchingResults.limited(to: visibleCount))
     }
 }

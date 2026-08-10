@@ -212,17 +212,110 @@ final class CityListViewModelTests: XCTestCase {
         expect(sut, toShowCities: [sydney])
     }
 
+    func test_load_withMoreCitiesThanThePageSize_showsOnlyTheFirstPage() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
+
+        await sut.load()
+
+        expect(sut, toShowCities: Array(cities.prefix(2)))
+    }
+
+    func test_showMoreResults_afterTheLastVisibleCity_showsTheNextPage() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
+        await sut.load()
+
+        sut.showMoreResults(after: cities[1].id)
+
+        expect(sut, toShowCities: cities)
+    }
+
+    func test_showMoreResults_afterACityThatIsNotTheLastVisible_showsTheSamePage() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
+        await sut.load()
+
+        sut.showMoreResults(after: cities[0].id)
+
+        expect(sut, toShowCities: Array(cities.prefix(2)))
+    }
+
+    func test_showMoreResults_withEveryResultAlreadyVisible_showsTheSameCities() async {
+        let cities = makeCities(2)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
+        await sut.load()
+
+        sut.showMoreResults(after: cities[1].id)
+
+        expect(sut, toShowCities: cities)
+    }
+
+    func test_search_afterShowingMoreResults_goesBackToTheFirstPage() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
+        await sut.load()
+        sut.showMoreResults(after: cities[1].id)
+
+        sut.search(prefix: "City")
+
+        expect(sut, toShowCities: Array(cities.prefix(2)))
+    }
+
+    func test_setFavoritesOnly_afterShowingMoreResults_goesBackToTheFirstPage() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(
+            loaderResults: [.success(CityCatalog(cities: cities))],
+            favoriteIDs: Set(cities.map(\.id)),
+            pageSize: 2
+        )
+        await sut.load()
+        sut.showMoreResults(after: cities[1].id)
+
+        sut.setFavoritesOnly(true)
+
+        expect(sut, toShowCities: Array(cities.prefix(2)))
+    }
+
+    func test_toggleFavorite_withTheFavoritesFilterOff_keepsTheVisibleCitiesUntouched() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
+        await sut.load()
+        sut.showMoreResults(after: cities[1].id)
+
+        sut.toggleFavorite(cityID: cities[0].id)
+
+        expect(sut, toShowCities: cities)
+    }
+
+    func test_toggleFavorite_withTheFavoritesFilterOn_keepsTheVisibleWindowWhileUpdatingTheList() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(
+            loaderResults: [.success(CityCatalog(cities: cities))],
+            favoriteIDs: Set(cities.map(\.id)),
+            pageSize: 2
+        )
+        await sut.load()
+        sut.setFavoritesOnly(true)
+        sut.showMoreResults(after: cities[1].id)
+
+        sut.toggleFavorite(cityID: cities[3].id)
+
+        expect(sut, toShowCities: Array(cities.prefix(3)))
+    }
+
     // MARK: - Helpers
 
     private func makeSUT(
         loaderResults: [Result<CityCatalog, CityCatalogLoadError>] = [.success(CityCatalog(cities: []))],
         favoriteIDs: Set<Int> = [],
+        pageSize: Int = 50,
         file: StaticString = #filePath,
         line: UInt = #line
     ) -> (sut: CityListViewModel, favoritesStore: FavoritesStoreSpy) {
         let loader = CityCatalogLoaderStub(results: loaderResults)
         let favoritesStore = FavoritesStoreSpy(favoriteIDs: favoriteIDs)
-        let sut = CityListViewModel(loader: loader, favoritesStore: favoritesStore)
+        let sut = CityListViewModel(loader: loader, favoritesStore: favoritesStore, pageSize: pageSize)
         trackForMemoryLeaks(sut, file: file, line: line)
         trackForMemoryLeaks(favoritesStore, file: file, line: line)
         return (sut, favoritesStore)
@@ -234,6 +327,10 @@ final class CityListViewModelTests: XCTestCase {
 
     private func makeSydney() -> City {
         makeCity(id: 2, name: "Sydney", countryCode: "AU", latitude: 0, longitude: 0).model
+    }
+
+    private func makeCities(_ count: Int) -> [City] {
+        (1...count).map { makeCity(id: $0, name: "City\($0)", countryCode: "US", latitude: 0, longitude: 0).model }
     }
 
     @MainActor
