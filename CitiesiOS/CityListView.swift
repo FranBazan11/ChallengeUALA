@@ -14,6 +14,7 @@ public struct CityListView: View {
     @State private var searchText = ""
     @State private var showsFavoritesOnly = false
     @State private var reloadToken = 0
+    @FocusState private var isFilterFocused: Bool
 
     public init(viewModel: CityListViewModel) {
         self.viewModel = viewModel
@@ -23,10 +24,17 @@ public struct CityListView: View {
         VStack(spacing: 0) {
             TextField("Filtrar por prefijo", text: $searchText)
                 .textFieldStyle(.roundedBorder)
+                .focused($isFilterFocused)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.done)
                 .padding(.horizontal)
                 .padding(.top)
                 .onChange(of: searchText) { _, newValue in
                     viewModel.search(prefix: newValue)
+                }
+                .onSubmit {
+                    isFilterFocused = false
                 }
 
             Toggle("Solo favoritos", isOn: $showsFavoritesOnly)
@@ -37,6 +45,10 @@ public struct CityListView: View {
 
             content
         }
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded {
+            isFilterFocused = false
+        })
         .task(id: reloadToken) {
             await viewModel.load()
         }
@@ -65,6 +77,7 @@ public struct CityListView: View {
                     )
                 }
                 .listStyle(.plain)
+                .scrollDismissesKeyboard(.immediately)
             }
 
         case let .failed(message):

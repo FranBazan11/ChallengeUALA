@@ -36,6 +36,7 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 - **Dado** el catálogo cargado, **cuando** el filtro queda vacío, **entonces** veo el catálogo completo, ordenado
 - **Dado** el catálogo cargado, **cuando** escribo un prefijo sin coincidencias, **entonces** veo el estado vacío
 - **Dado** que estoy escribiendo, **cuando** agrego o borro un carácter, **entonces** la lista se actualiza con cada cambio, sin trabarse
+- **Dado** que el teclado está abierto porque toqué el filtro, **cuando** toco cualquier otra parte de la pantalla o scrolleo la lista, **entonces** el teclado se esconde y el texto del filtro se conserva
 
 ### Use Case: Search Cities By Prefix
 
@@ -66,6 +67,8 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 - [x] Orden final: ciudad y después país (`"Denver, US"` antes que `"Sydney, AU"`)
 - [x] Cada carácter agregado o borrado actualiza la lista de forma síncrona — 0,36 µs medidos en el MR #2 sobre 200.000 ciudades hacen innecesario un `Task` por tecla
 - [x] La cancelación aplica al `Task` de carga del catálogo, no a la búsqueda — ver Historia 9
+- [x] Tocar fuera del campo de filtro esconde el teclado *(agregado en el MR #5)*
+- [x] Esconder el teclado conserva el texto del filtro y los resultados vigentes *(agregado en el MR #5)*
 
 ---
 
