@@ -325,6 +325,7 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 - **Dado** que no tengo conectividad o el servidor responde mal, **cuando** la carga falla, **entonces** veo un mensaje de error claro y un botón para reintentar
 - **Dado** que la carga falló, **cuando** toco "Reintentar", **entonces** vuelvo a ver el indicador de carga y se dispara una nueva carga
 - **Dado** que estoy cargando, **cuando** la carga se cancela (por ejemplo, me voy de la pantalla), **entonces** no se muestra ningún error
+- **Dado** que el catálogo tarda en mapearse e indexarse, **cuando** la carga está en curso, **entonces** la UI sigue respondiendo — el trabajo del loader no corre en el hilo de UI
 
 ### Use Case: Present City Catalog Load
 
@@ -346,6 +347,8 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 
 El ViewModel depende del protocolo `CityCatalogLoader` (definido en `Cities/CityFeature/`, junto al modelo de dominio), no del tipo concreto `RemoteCityCatalogLoader` — así el test del ViewModel usa un stub en memoria, y la implementación de red se prueba aparte, como ya hace la Historia 3.
 
+El requirement `load()` del protocolo lleva `@concurrent`: con `SWIFT_APPROACHABLE_CONCURRENCY` activo (`NonisolatedNonsendingByDefault`), una función `async` sin esa marca hereda el aislamiento de quien la llama, y quien llama a `load()` es `CityListViewModel`, que es `@MainActor`. `@concurrent` es el opt-in explícito para que el mapeo del JSON y la construcción del índice de búsqueda corran fuera del hilo de UI.
+
 ### Checklist
 
 - [x] Estado inicial "cargando" antes de que la primera carga resuelva
@@ -354,6 +357,7 @@ El ViewModel depende del protocolo `CityCatalogLoader` (definido en `Cities/City
 - [x] Datos inválidos deja el estado en "error" con un mensaje
 - [x] Reintentar (una nueva llamada a cargar) puede resolver en "cargado" después de una falla previa
 - [x] Cancelación no produce un estado de error
+- [x] Cargar desde un llamador @MainActor no corre el trabajo del loader en el hilo de UI
 
 ---
 
@@ -516,7 +520,8 @@ La paginación es una decisión de presentación, no de dominio: `CityCatalog` s
 - [x] Pedir más con todos los resultados ya visibles no cambia nada
 - [x] Un prefijo nuevo vuelve la ventana a la primera página
 - [x] Cambiar el flag "solo favoritos" vuelve la ventana a la primera página
-- [x] Marcar un favorito con el filtro apagado conserva la ventana y no republica la lista
+- [x] Marcar un favorito con el filtro apagado conserva la ventana
+- [x] Marcar un favorito con el filtro apagado no republica la lista
 - [x] Marcar un favorito con el filtro prendido conserva la ventana y actualiza la lista
 - [x] `limited(to:)` acota respetando el orden, y con un tope mayor al total entrega todo
 - [x] Verificación en la app real contra el gist: primera tecla, borrado hasta vacío, toggle sin prefijo y scroll hasta el fondo, sin trabas
