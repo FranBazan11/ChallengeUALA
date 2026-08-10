@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import Observation
 import Cities
 
 @MainActor
@@ -304,6 +305,46 @@ final class CityListViewModelTests: XCTestCase {
         expect(sut, toShowCities: Array(cities.prefix(3)))
     }
 
+    func test_load_doesNotRunTheLoaderOnTheMainThread() async {
+        let recorder = MainThreadRecorder()
+        let sut = makeSUT(loaderRecordingInto: recorder)
+
+        await sut.load()
+
+        let loadedOnMainThread = await recorder.loadedOnMainThread
+        XCTAssertEqual(loadedOnMainThread, false)
+    }
+
+    func test_toggleFavorite_withTheFavoritesFilterOff_doesNotRepublishTheList() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
+        await sut.load()
+        sut.showMoreResults(after: cities[1].id)
+
+        let didPublish = publishesState(sut) {
+            sut.toggleFavorite(cityID: cities[0].id)
+        }
+
+        XCTAssertFalse(didPublish)
+    }
+
+    func test_toggleFavorite_withTheFavoritesFilterOn_republishesTheList() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(
+            loaderResults: [.success(CityCatalog(cities: cities))],
+            favoriteIDs: Set(cities.map(\.id)),
+            pageSize: 2
+        )
+        await sut.load()
+        sut.setFavoritesOnly(true)
+
+        let didPublish = publishesState(sut) {
+            sut.toggleFavorite(cityID: cities[0].id)
+        }
+
+        XCTAssertTrue(didPublish)
+    }
+
     // MARK: - Helpers
 
     private func makeSUT(
@@ -321,6 +362,33 @@ final class CityListViewModelTests: XCTestCase {
         return (sut, favoritesStore)
     }
 
+    private func makeSUT(
+        loaderRecordingInto recorder: MainThreadRecorder,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> CityListViewModel {
+        let loader = MainThreadRecordingCityCatalogLoader(recorder: recorder)
+        let favoritesStore = FavoritesStoreSpy(favoriteIDs: [])
+        let sut = CityListViewModel(loader: loader, favoritesStore: favoritesStore)
+        trackForMemoryLeaks(sut, file: file, line: line)
+        trackForMemoryLeaks(favoritesStore, file: file, line: line)
+        trackForMemoryLeaks(recorder, file: file, line: line)
+        return sut
+    }
+
+    private func publishesState(_ sut: CityListViewModel, when action: () -> Void) -> Bool {
+        let recorder = StatePublicationRecorder()
+        withObservationTracking {
+            _ = sut.state
+        } onChange: {
+            MainActor.assumeIsolated { recorder.didPublish = true }
+        }
+
+        action()
+
+        return recorder.didPublish
+    }
+
     private func makeAlabama() -> City {
         makeCity(id: 1, name: "Alabama", countryCode: "US", latitude: 0, longitude: 0).model
     }
@@ -331,6 +399,11 @@ final class CityListViewModelTests: XCTestCase {
 
     private func makeCities(_ count: Int) -> [City] {
         (1...count).map { makeCity(id: $0, name: "City\($0)", countryCode: "US", latitude: 0, longitude: 0).model }
+    }
+
+    @MainActor
+    private final class StatePublicationRecorder {
+        var didPublish = false
     }
 
     @MainActor
@@ -418,4 +491,26 @@ final class CityListViewModelTests: XCTestCase {
             }
         }
     }
+
+    private actor MainThreadRecorder {
+        private(set) var loadedOnMainThread: Bool?
+
+        func record(mainThread: Bool) {
+            loadedOnMainThread = mainThread
+        }
+    }
+
+    private struct MainThreadRecordingCityCatalogLoader: CityCatalogLoader {
+        let recorder: MainThreadRecorder
+
+        func load() async throws(CityCatalogLoadError) -> CityCatalog {
+            let isMainThread = isMainThreadSync()
+            await recorder.record(mainThread: isMainThread)
+            return CityCatalog(cities: [])
+        }
+    }
+}
+
+private nonisolated func isMainThreadSync() -> Bool {
+    Thread.isMainThread
 }

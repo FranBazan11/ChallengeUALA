@@ -12,5 +12,6 @@ public enum CityCatalogLoadError: Error, Equatable, Sendable {
 }
 
 public protocol CityCatalogLoader: Sendable {
+    @concurrent
     func load() async throws(CityCatalogLoadError) -> CityCatalog
 }
