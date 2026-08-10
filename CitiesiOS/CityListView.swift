@@ -75,6 +75,7 @@ public struct CityListView: View {
                         viewModel: CityCellViewModel(city: city, isFavorite: viewModel.isFavorite(city.id)),
                         onToggleFavorite: { viewModel.toggleFavorite(cityID: city.id) }
                     )
+                    .onAppear { viewModel.showMoreResults(after: city.id) }
                 }
                 .listStyle(.plain)
                 .scrollDismissesKeyboard(.immediately)
