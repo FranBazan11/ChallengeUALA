@@ -452,3 +452,71 @@ El MR #2 dejó esto preparado a propósito al decidir que el mapper reciba `Data
 - [ ] La cancelación durante la carga se propaga igual que en la Historia 3
 - [ ] El ViewModel no cambia: sigue dependiendo solo de `CityCatalogLoader`
 - [ ] Verificación de punta a punta con la red real cortada, después de una carga exitosa previa
+
+---
+
+## Historia 12 — Mantener la lista fluida con 200.000 resultados
+
+**Deriva de [REQUISITOS.md](REQUISITOS.md):** *"La UI debe ser lo más responsiva posible mientras se escribe en el filtro"* y *"la lista debe actualizarse con cada carácter agregado/eliminado del filtro"*. Las Historias 1 y 5 dejaron esos dos requisitos correctos en resultado pero no en tiempo de respuesta.
+
+**Como** usuario del catálogo
+**Quiero** que la lista responda sin trabarse aunque haya 200.000 resultados
+**Para** poder escribir y filtrar sin esperar a que la app se descongele
+
+### El problema concreto que resuelve
+
+Con el filtro de texto vacío, la búsqueda devuelve las 200.000 ciudades y el ViewModel se las entrega enteras a la `List`. Actualizar la lista obliga entonces a SwiftUI a resolver la identidad de la colección vieja y la nueva y a calcular el batch update contra el collection view que la respalda: un costo proporcional al tamaño de la colección **anterior**, pagado en el main thread.
+
+Eso explica la forma exacta del síntoma. Escribiendo "Albuquerque" desde el filtro vacío, solo traba la "A" (200.000 → ~5.000); de la segunda letra en adelante se escribe fluido (~5.000 → ~700). Lo mismo con el switch "Solo favoritos" sin prefijo (200.000 → un puñado), y lo mismo al borrar hasta volver a filtro vacío.
+
+No es el algoritmo de búsqueda: medido sobre 200.000 ciudades, tipear seis caracteres seguidos cuesta **0,37 ms en total** (~0,06 ms por tecla). El costo que se siente no está en el dominio.
+
+### Escenarios
+
+- **Dado** el filtro vacío con las 200.000 ciudades a la vista, **cuando** escribo el primer carácter, **entonces** la lista se actualiza sin trabarse
+- **Dado** un prefijo escrito, **cuando** lo borro hasta dejar el filtro vacío, **entonces** la lista se actualiza sin trabarse
+- **Dado** el filtro vacío, **cuando** activo o desactivo "Solo favoritos", **entonces** el switch cambia de posición al instante y la lista se actualiza sin trabarse
+- **Dado** que scrolleé hasta el fondo de los resultados visibles, **cuando** sigo scrolleando, **entonces** aparecen más resultados sin cortes ni saltos
+- **Dado** que scrolleé lejos del principio, **cuando** marco una ciudad como favorita, **entonces** la lista no vuelve al principio
+
+### Use Case: Present Visible City Page
+
+**Data (input):** prefijo actual, flag "solo favoritos", conjunto de IDs favoritos, pedido de más resultados
+
+**Curso primario (happy path):**
+1. El sistema resuelve los resultados que coinciden con la consulta vigente
+2. El sistema entrega solo la primera página de esos resultados
+3. El sistema recuerda cuántos resultados dejó visibles
+
+**Curso alternativo — se pide más al llegar al final de lo visible:**
+1. El sistema amplía la ventana visible en una página
+2. El sistema entrega la ventana ampliada, sin recalcular la consulta
+
+**Curso alternativo — se pide más con todos los resultados ya visibles:**
+1. El sistema no cambia nada
+
+**Curso alternativo — cambia la consulta (prefijo o flag de favoritos):**
+1. El sistema vuelve a la primera página
+
+**Curso alternativo — cambia solo el conjunto de favoritos (marcar/desmarcar):**
+1. El sistema conserva la ventana visible — el usuario no pierde su lugar en la lista
+2. Con el filtro de favoritos apagado, la lista visible no cambia: solo cambia el ícono de la celda
+
+### Contrato
+
+La paginación es una decisión de presentación, no de dominio: `CityCatalog` sigue devolviendo el rango completo de coincidencias, y `CitySearchResults` solo suma la operación de acotarlo (`limited(to:)`), que se resuelve sobre el slice existente sin copiar entradas. `CityListViewModel` guarda el resultado completo puertas adentro y publica la ventana; la vista no decide cuándo pedir más, solo avisa qué fila apareció.
+
+**Por qué paginar y no debouncear.** Un debounce no elimina el trabajo, lo demora: la primera tecla seguiría pagando el diff de 200.000, solo que más tarde, y encima incumpliría *"la lista debe actualizarse con cada carácter"*. Paginar acota el costo de **toda** transición al tamaño de una página.
+
+### Checklist
+
+- [x] Una búsqueda con más resultados que el tamaño de página entrega solo la primera página
+- [x] Pedir más sobre la última fila visible agrega la página siguiente
+- [x] Pedir más sobre una fila que no es la última no cambia nada
+- [x] Pedir más con todos los resultados ya visibles no cambia nada
+- [x] Un prefijo nuevo vuelve la ventana a la primera página
+- [x] Cambiar el flag "solo favoritos" vuelve la ventana a la primera página
+- [x] Marcar un favorito con el filtro apagado conserva la ventana y no republica la lista
+- [x] Marcar un favorito con el filtro prendido conserva la ventana y actualiza la lista
+- [x] `limited(to:)` acota respetando el orden, y con un tope mayor al total entrega todo
+- [x] Verificación en la app real contra el gist: primera tecla, borrado hasta vacío, toggle sin prefijo y scroll hasta el fondo, sin trabas
