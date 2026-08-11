@@ -11,65 +11,65 @@ import Cities
 @MainActor
 final class SwiftDataFavoritesStoreTests: XCTestCase {
 
-    func test_loadFavoriteIDs_onEmptyStore_deliversNoFavorites() {
+    func test_loadFavoriteIDs_onEmptyStore_deliversNoFavorites() throws {
         let sut = makeSUT()
 
-        XCTAssertEqual(sut.loadFavoriteIDs(), [])
+        XCTAssertEqual(try sut.loadFavoriteIDs(), [])
     }
 
-    func test_setFavorite_marksCityAsFavorite() {
+    func test_setFavorite_marksCityAsFavorite() throws {
         let sut = makeSUT()
 
-        sut.setFavorite(707860, isFavorite: true)
+        try sut.setFavorite(707860, isFavorite: true)
 
-        XCTAssertEqual(sut.loadFavoriteIDs(), [707860])
+        XCTAssertEqual(try sut.loadFavoriteIDs(), [707860])
     }
 
-    func test_setFavorite_unmarksAFavoriteCity() {
+    func test_setFavorite_unmarksAFavoriteCity() throws {
         let sut = makeSUT()
-        sut.setFavorite(707860, isFavorite: true)
+        try sut.setFavorite(707860, isFavorite: true)
 
-        sut.setFavorite(707860, isFavorite: false)
+        try sut.setFavorite(707860, isFavorite: false)
 
-        XCTAssertEqual(sut.loadFavoriteIDs(), [])
+        XCTAssertEqual(try sut.loadFavoriteIDs(), [])
     }
 
-    func test_setFavorite_unmarkingANonFavoriteCity_hasNoEffect() {
+    func test_setFavorite_unmarkingANonFavoriteCity_hasNoEffect() throws {
         let sut = makeSUT()
 
-        sut.setFavorite(707860, isFavorite: false)
+        try sut.setFavorite(707860, isFavorite: false)
 
-        XCTAssertEqual(sut.loadFavoriteIDs(), [])
+        XCTAssertEqual(try sut.loadFavoriteIDs(), [])
     }
 
-    func test_setFavorite_markingTwice_doesNotDuplicateTheFavorite() {
+    func test_setFavorite_markingTwice_doesNotDuplicateTheFavorite() throws {
         let sut = makeSUT()
-        sut.setFavorite(707860, isFavorite: true)
-        sut.setFavorite(707860, isFavorite: true)
+        try sut.setFavorite(707860, isFavorite: true)
+        try sut.setFavorite(707860, isFavorite: true)
 
-        sut.setFavorite(707860, isFavorite: false)
+        try sut.setFavorite(707860, isFavorite: false)
 
-        XCTAssertEqual(sut.loadFavoriteIDs(), [])
+        XCTAssertEqual(try sut.loadFavoriteIDs(), [])
     }
 
-    func test_setFavorite_keepsOtherFavoritesUntouched() {
+    func test_setFavorite_keepsOtherFavoritesUntouched() throws {
         let sut = makeSUT()
-        sut.setFavorite(1, isFavorite: true)
-        sut.setFavorite(2, isFavorite: true)
+        try sut.setFavorite(1, isFavorite: true)
+        try sut.setFavorite(2, isFavorite: true)
 
-        sut.setFavorite(1, isFavorite: false)
+        try sut.setFavorite(1, isFavorite: false)
 
-        XCTAssertEqual(sut.loadFavoriteIDs(), [2])
+        XCTAssertEqual(try sut.loadFavoriteIDs(), [2])
     }
 
-    func test_loadFavoriteIDs_onASeparateStoreInstance_deliversPreviouslySavedFavorites() {
+    func test_loadFavoriteIDs_onASeparateStoreInstance_deliversPreviouslySavedFavorites() throws {
         let storeURL = testSpecificStoreURL()
         let storeToWrite = makeSUT(storeURL: storeURL)
-        storeToWrite.setFavorite(707860, isFavorite: true)
+        try storeToWrite.setFavorite(707860, isFavorite: true)
 
         let storeToRead = makeSUT(storeURL: storeURL)
 
-        XCTAssertEqual(storeToRead.loadFavoriteIDs(), [707860])
+        XCTAssertEqual(try storeToRead.loadFavoriteIDs(), [707860])
     }
 
     // MARK: - Helpers

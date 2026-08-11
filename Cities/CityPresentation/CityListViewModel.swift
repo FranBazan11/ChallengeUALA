@@ -36,9 +36,9 @@ public final class CityListViewModel: Sendable {
     public init(loader: CityCatalogLoader, favoritesStore: FavoritesStore, pageSize: Int = 50) {
         self.loader = loader
         self.favoritesStore = favoritesStore
-        self.pageSize = pageSize
-        visibleCount = pageSize
-        favoriteIDs = favoritesStore.loadFavoriteIDs()
+        self.pageSize = max(1, pageSize)
+        visibleCount = self.pageSize
+        favoriteIDs = (try? favoritesStore.loadFavoriteIDs()) ?? []
     }
 
     public func load() async {
@@ -73,7 +73,13 @@ public final class CityListViewModel: Sendable {
 
     public func toggleFavorite(cityID: Int) {
         let isFavorite = !favoriteIDs.contains(cityID)
-        favoritesStore.setFavorite(cityID, isFavorite: isFavorite)
+
+        do {
+            try favoritesStore.setFavorite(cityID, isFavorite: isFavorite)
+        } catch {
+            return
+        }
+
         if isFavorite {
             favoriteIDs.insert(cityID)
         } else {

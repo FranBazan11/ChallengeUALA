@@ -56,6 +56,12 @@ final class CitySearchResultsTests: XCTestCase {
         expect(results, toDeliver: [])
     }
 
+    func test_limitedTo_aNegativeBound_deliversNoCities() {
+        let results = makeSUT().search(prefix: "").limited(to: -1)
+
+        expect(results, toDeliver: [])
+    }
+
     func test_limitedTo_afterFilteringFavorites_deliversTheFirstFavorites() {
         let results = makeSUT().search(prefix: "").filter(byFavoriteIDs: [1, 3, 5]).limited(to: 2)
 

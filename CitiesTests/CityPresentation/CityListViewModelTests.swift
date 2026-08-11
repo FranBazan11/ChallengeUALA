@@ -128,6 +128,43 @@ final class CityListViewModelTests: XCTestCase {
         ])
     }
 
+    func test_toggleFavorite_whenTheStoreFailsToPersist_leavesTheCityNotFavorite() {
+        let (sut, _) = makeSUT(setError: anyNSError())
+
+        sut.toggleFavorite(cityID: 1)
+
+        XCTAssertFalse(sut.isFavorite(1))
+    }
+
+    func test_toggleFavorite_whenTheStoreFailsToPersist_leavesAFavoriteCityFavorite() {
+        let (sut, _) = makeSUT(favoriteIDs: [1], setError: anyNSError())
+
+        sut.toggleFavorite(cityID: 1)
+
+        XCTAssertTrue(sut.isFavorite(1))
+    }
+
+    func test_toggleFavorite_whenTheStoreFailsToPersist_keepsTheVisibleCitiesUntouched() async {
+        let (alabama, sydney) = (makeAlabama(), makeSydney())
+        let (sut, _) = makeSUT(
+            loaderResults: [.success(CityCatalog(cities: [alabama, sydney]))],
+            favoriteIDs: [alabama.id, sydney.id],
+            setError: anyNSError()
+        )
+        await sut.load()
+        sut.setFavoritesOnly(true)
+
+        sut.toggleFavorite(cityID: alabama.id)
+
+        expect(sut, toShowCities: [alabama, sydney])
+    }
+
+    func test_init_whenTheStoreFailsToLoad_startsWithNoFavorites() {
+        let (sut, _) = makeSUT(favoriteIDs: [1], loadError: anyNSError())
+
+        XCTAssertFalse(sut.isFavorite(1))
+    }
+
     func test_toggleFavorite_beforeCatalogLoads_doesNotChangeState() {
         let (sut, _) = makeSUT()
 
@@ -218,6 +255,25 @@ final class CityListViewModelTests: XCTestCase {
         let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
 
         await sut.load()
+
+        expect(sut, toShowCities: Array(cities.prefix(2)))
+    }
+
+    func test_load_withANonPositivePageSize_stillShowsAFirstPage() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 0)
+
+        await sut.load()
+
+        expect(sut, toShowCities: Array(cities.prefix(1)))
+    }
+
+    func test_showMoreResults_withANegativePageSize_canStillGrowTheVisibleWindow() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: -1)
+        await sut.load()
+
+        sut.showMoreResults(after: cities[0].id)
 
         expect(sut, toShowCities: Array(cities.prefix(2)))
     }
@@ -350,12 +406,14 @@ final class CityListViewModelTests: XCTestCase {
     private func makeSUT(
         loaderResults: [Result<CityCatalog, CityCatalogLoadError>] = [.success(CityCatalog(cities: []))],
         favoriteIDs: Set<Int> = [],
+        loadError: Error? = nil,
+        setError: Error? = nil,
         pageSize: Int = 50,
         file: StaticString = #filePath,
         line: UInt = #line
     ) -> (sut: CityListViewModel, favoritesStore: FavoritesStoreSpy) {
         let loader = CityCatalogLoaderStub(results: loaderResults)
-        let favoritesStore = FavoritesStoreSpy(favoriteIDs: favoriteIDs)
+        let favoritesStore = FavoritesStoreSpy(favoriteIDs: favoriteIDs, loadError: loadError, setError: setError)
         let sut = CityListViewModel(loader: loader, favoritesStore: favoritesStore, pageSize: pageSize)
         trackForMemoryLeaks(sut, file: file, line: line)
         trackForMemoryLeaks(favoritesStore, file: file, line: line)
@@ -414,17 +472,23 @@ final class CityListViewModelTests: XCTestCase {
 
         private(set) var messages: [Message] = []
         private var favoriteIDs: Set<Int>
+        private let loadError: Error?
+        private let setError: Error?
 
-        init(favoriteIDs: Set<Int>) {
+        init(favoriteIDs: Set<Int>, loadError: Error? = nil, setError: Error? = nil) {
             self.favoriteIDs = favoriteIDs
+            self.loadError = loadError
+            self.setError = setError
         }
 
-        func loadFavoriteIDs() -> Set<Int> {
-            favoriteIDs
+        func loadFavoriteIDs() throws -> Set<Int> {
+            if let loadError { throw loadError }
+            return favoriteIDs
         }
 
-        func setFavorite(_ cityID: Int, isFavorite: Bool) {
+        func setFavorite(_ cityID: Int, isFavorite: Bool) throws {
             messages.append(.setFavorite(cityID: cityID, isFavorite: isFavorite))
+            if let setError { throw setError }
             if isFavorite {
                 favoriteIDs.insert(cityID)
             } else {

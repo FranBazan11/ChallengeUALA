@@ -23,7 +23,7 @@ public struct CitySearchResults: RandomAccessCollection, Sendable {
     }
 
     public func limited(to maxCount: Int) -> CitySearchResults {
-        CitySearchResults(cities: cities, entries: entries.prefix(maxCount))
+        CitySearchResults(cities: cities, entries: entries.prefix(Swift.max(0, maxCount)))
     }
 
     public func filter(byFavoriteIDs favoriteIDs: Set<Int>) -> CitySearchResults {

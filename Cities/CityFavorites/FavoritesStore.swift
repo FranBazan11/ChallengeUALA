@@ -7,6 +7,6 @@
 
 @MainActor
 public protocol FavoritesStore {
-    func loadFavoriteIDs() -> Set<Int>
-    func setFavorite(_ cityID: Int, isFavorite: Bool)
+    func loadFavoriteIDs() throws -> Set<Int>
+    func setFavorite(_ cityID: Int, isFavorite: Bool) throws
 }
