@@ -69,6 +69,8 @@ Este documento es el contrato de cada historia antes de escribir código, y el c
 - [x] La cancelación aplica al `Task` de carga del catálogo, no a la búsqueda — ver Historia 9
 - [x] Tocar fuera del campo de filtro esconde el teclado *(agregado en el MR #5)*
 - [x] Esconder el teclado conserva el texto del filtro y los resultados vigentes *(agregado en el MR #5)*
+- [x] Tocar **sobre la lista cargada** esconde el teclado — el caso que motivó el `simultaneousGesture`, y que con la lista ocupando casi toda la pantalla es lo que "tocar afuera" significa en la práctica *(agregado en el MR #8)*
+- [x] Scrollear la lista cargada esconde el teclado *(agregado en el MR #8)*
 
 ---
 
@@ -258,21 +260,47 @@ Que la operación pueda fallar es lo que le permite al ViewModel no mentir: si l
 - **Dado** la lista de ciudades, **cuando** toco una ciudad, **entonces** el mapa centra su vista en las coordenadas de esa ciudad
 - **Dado** que estoy en portrait, **cuando** toco una ciudad, **entonces** navego a una pantalla de mapa separada, con un botón para volver
 - **Dado** que estoy en landscape, **cuando** toco una ciudad, **entonces** el mapa se actualiza en el panel derecho, sin navegar a otra pantalla
+- **Dado** que estoy en landscape con una ciudad ya dibujada en el mapa, **cuando** toco otra ciudad de la lista, **entonces** el mapa se recentra en la nueva sin que yo haga nada más
+- **Dado** que estoy en landscape y todavía no toqué ninguna ciudad, **cuando** miro el panel derecho, **entonces** veo una invitación a elegir una, no un mapa en cualquier lado
 
 ### Use Case: Show City On Map
 
-**Data (input):** coordenadas de la ciudad seleccionada
+**Data (input):** id de la ciudad tocada en la lista
 
 **Curso primario (happy path):**
-1. El sistema recibe las coordenadas de la ciudad seleccionada
-2. El sistema centra el mapa en esas coordenadas
+1. El sistema ubica la ciudad tocada entre los resultados visibles
+2. El sistema entrega su título y sus coordenadas, ya listos para dibujar
+3. El sistema centra el mapa en esas coordenadas, con un radio fijo alrededor
+
+**Curso alternativo — todavía no hay ninguna ciudad seleccionada:**
+1. El sistema no centra ningún mapa y muestra una invitación a elegir una ciudad
+
+**Curso alternativo — la ciudad pedida no está entre los resultados visibles:**
+1. El sistema no entrega datos de mapa y la selección vigente no cambia
+
+### Contrato
+
+El módulo `Cities` define `CityMapViewModel` en `CityPresentation/`: un struct inmutable con `id`, `title`, `latitude`, `longitude` y `spanInMeters`, construido desde una `City` — molde exacto de `CityCellViewModel`. **MapKit no entra a `Cities`**: la traducción a la región del mapa vive en `CitiesiOS`, del lado de afuera, igual que `URLSession` vive en `CityAPIInfrastructure` y SwiftData en `CityFavoritesInfrastructure`.
+
+El radio va en **metros y no en grados**. Un grado de latitud mide siempre lo mismo, pero uno de longitud se encoge con el coseno de la latitud: la misma región expresada en grados se ve angosta cerca del ecuador y ancha cerca de los polos. En metros, el encuadre es el mismo para Hurzuf que para Ushuaia.
+
+Quién resuelve la selección: `CityListViewModel.mapViewModel(for cityID:)`, una query pura sobre la ventana visible — un tap solo puede venir de una fila en pantalla, así que no hace falta recorrer el catálogo. Es lo que permite que `CitiesiOS` no instancie **ningún** tipo de `Cities`: la vista recibe view models ya armados y devuelve ids. La regla de *"ningún módulo instancia componentes de otro módulo"* pasa a estar sostenida por la forma de la API y no por disciplina.
+
+No hace falta ningún protocolo nuevo: el mapa no carga datos, dibuja coordenadas que el catálogo ya tiene en memoria.
 
 ### Checklist
 
+- [x] El view model de mapa arma el título combinando nombre y código de país
+- [x] El view model de mapa conserva las coordenadas de la ciudad sin transformarlas
+- [x] Pedir el view model de mapa de una ciudad visible entrega sus coordenadas
+- [x] Pedir el view model de mapa de una ciudad fuera de la ventana visible no entrega nada
+- [x] Pedir el view model de mapa antes de que el catálogo cargue no entrega nada
 - [ ] Seleccionar una ciudad actualiza la región visible del mapa
-- [ ] En portrait, seleccionar una ciudad navega a la pantalla de mapa
-- [ ] En landscape, seleccionar una ciudad actualiza el panel de mapa sin navegar
-- [ ] Volver desde el mapa en portrait conserva el estado del filtro y del scroll de la lista
+- [ ] Seleccionar otra ciudad con el mapa ya dibujado lo recentra
+- [x] Sin ciudad seleccionada, el mapa muestra la invitación a elegir una
+- [x] En portrait, seleccionar una ciudad navega a la pantalla de mapa
+- [x] En landscape, seleccionar una ciudad actualiza el panel de mapa sin navegar
+- [x] Volver desde el mapa en portrait conserva el estado del filtro y del scroll de la lista
 
 ---
 
@@ -314,6 +342,7 @@ Que la operación pueda fallar es lo que le permite al ViewModel no mentir: si l
 - **Dado** el dispositivo en portrait, **cuando** abro la app, **entonces** veo la lista y el mapa como pantallas separadas
 - **Dado** el dispositivo en landscape, **cuando** abro la app, **entonces** veo la lista y el mapa como paneles de una única pantalla
 - **Dado** que estoy a mitad de una búsqueda, **cuando** roto el dispositivo, **entonces** no pierdo el texto del filtro ni la selección actual
+- **Dado** que el catálogo ya está cargado, **cuando** roto el dispositivo, **entonces** no vuelvo a ver el indicador de carga ni se descarga el catálogo de nuevo
 
 ### Use Case: Adapt Layout To Orientation
 
@@ -323,12 +352,27 @@ Que la operación pueda fallar es lo que le permite al ViewModel no mentir: si l
 1. El sistema evalúa la clase de tamaño vertical disponible
 2. El sistema compone lista y mapa como pantallas separadas si es `.regular`, o como paneles de una sola pantalla si es `.compact`
 
+**Curso alternativo — cambia la orientación con trabajo ya hecho:**
+1. El sistema conserva el catálogo cargado, la consulta vigente y la ciudad seleccionada
+2. El sistema recompone la pantalla sin volver a pedir el catálogo
+
+### Contrato
+
+**`verticalSizeClass`, no `horizontalSizeClass` ni `NavigationSplitView`**, por lo argumentado en [PLAN-TECNICO.md](PLAN-TECNICO.md) §5: en los iPhone que no son Plus/Pro Max, `horizontalSizeClass` es `.compact` en las dos orientaciones, y `NavigationSplitView` reacciona justamente a esa — se quedaría en una sola columna en landscape, que es lo contrario de lo que pide el enunciado.
+
+`CityCatalogView` (`CitiesiOS`) es la vista **estable**: pública, reemplaza a `CityListView` como raíz que arma el Composition Root, y es dueña de la carga y de la ciudad seleccionada. Las dos cosas viven **fuera** del condicional de layout. No es prolijidad: una vista que aparece en dos ramas de un `if` cambia de identidad al rotar, y con la identidad se va su `@State` y se vuelve a disparar su `.task` — o sea, se perdería el filtro y se re-descargarían los ~10 MB del catálogo con spinner. Con la carga y la selección en la vista estable, rotar no puede perder ninguna de las dos.
+
+Por la misma razón, el prefijo y el flag "solo favoritos" dejan de ser `@State` de la vista y suben a `CityListViewModel` como propiedades observables de solo lectura (`searchPrefix`, `showsFavoritesOnly`). La vista las lee y escribe por los comandos que ya existen (`search(prefix:)`, `setFavoritesOnly(_:)`) con un `Binding` armado a mano: una sola fuente de verdad en vez de dos sincronizadas por `.onChange`, CQS intacto —nada de `didSet` con efectos—, y sobreviven a la rotación porque las guarda el objeto que crea el Composition Root, no el árbol de vistas.
+
 ### Checklist
 
-- [ ] Snapshot en portrait: lista y mapa separados
-- [ ] Snapshot en landscape: lista y mapa en paneles
-- [ ] Rotar a mitad de búsqueda conserva el texto del filtro
-- [ ] Rotar con una ciudad seleccionada conserva la selección
+- [x] Snapshot en portrait: lista y mapa separados
+- [x] Snapshot en landscape: lista y mapa en paneles
+- [x] El prefijo vigente lo publica el view model, no la vista
+- [x] El flag "solo favoritos" lo publica el view model, no la vista
+- [x] Rotar a mitad de búsqueda conserva el texto del filtro
+- [x] Rotar con una ciudad seleccionada conserva la selección
+- [x] Rotar no vuelve a cargar el catálogo — verificado contra el gist real con un test de UI temporal, descartado después (ver la bitácora del MR #8)
 
 ---
 
@@ -524,11 +568,13 @@ No es el algoritmo de búsqueda: medido sobre 200.000 ciudades, tipear seis cara
 
 **Curso alternativo — cambia solo el conjunto de favoritos (marcar/desmarcar):**
 1. El sistema conserva la ventana visible — el usuario no pierde su lugar en la lista
-2. Con el filtro de favoritos apagado, la lista visible no cambia: solo cambia el ícono de la celda
+2. Con el filtro de favoritos apagado, el sistema no vuelve a consultar el catálogo: entrega la misma página con el ícono de esa sola celda actualizado
 
 ### Contrato
 
 La paginación es una decisión de presentación, no de dominio: `CityCatalog` sigue devolviendo el rango completo de coincidencias, y `CitySearchResults` solo suma la operación de acotarlo (`limited(to:)`), que se resuelve sobre el slice existente sin copiar entradas. `CityListViewModel` guarda el resultado completo puertas adentro y publica la ventana; la vista no decide cuándo pedir más, solo avisa qué fila apareció.
+
+Lo que se publica es la ventana ya convertida en view models de celda, no el modelo de dominio *(desde el MR #8)*. El array publicado tiene exactamente el tamaño de lo que la lista renderiza, así que el costo no cambia; lo que cambia es dónde vive el cruce entre resultados y favoritos — pasa al lado testeado, y la vista deja de instanciar tipos de `Cities`. Consecuencia directa: como el ícono de favorito viaja adentro de la celda publicada, marcar un favorito con el filtro apagado **sí** vuelve a entregar la página. Lo que se sigue evitando, que es lo que importaba, es volver a consultar el catálogo.
 
 **Por qué paginar y no debouncear.** Un debounce no elimina el trabajo, lo demora: la primera tecla seguiría pagando el diff de 200.000, solo que más tarde, y encima incumpliría *"la lista debe actualizarse con cada carácter"*. Paginar acota el costo de **toda** transición al tamaño de una página.
 
@@ -541,7 +587,8 @@ La paginación es una decisión de presentación, no de dominio: `CityCatalog` s
 - [x] Un prefijo nuevo vuelve la ventana a la primera página
 - [x] Cambiar el flag "solo favoritos" vuelve la ventana a la primera página
 - [x] Marcar un favorito con el filtro apagado conserva la ventana
-- [x] Marcar un favorito con el filtro apagado no republica la lista
+- [x] Marcar un favorito con el filtro apagado cambia exactamente una celda de la página publicada *(reemplaza al ítem "no republica la lista" del MR #6, que dejó de ser cierto; ver la bitácora del MR #8)*
+- [x] Marcar un favorito con el filtro apagado vuelve a entregar la página, que es lo que permite que el ícono cambie
 - [x] Marcar un favorito con el filtro prendido conserva la ventana y actualiza la lista
 - [x] `limited(to:)` acota respetando el orden, y con un tope mayor al total entrega todo
 - [x] `limited(to:)` con un tope negativo entrega una lista vacía, no un crash
