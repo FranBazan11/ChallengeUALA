@@ -25,13 +25,13 @@ public final class SwiftDataFavoritesStore: FavoritesStore {
         SwiftDataFavoritesStore(container: try ModelContainer(for: FavoriteCity.self))
     }
 
-    public func loadFavoriteIDs() -> Set<Int> {
-        let favorites = (try? context.fetch(FetchDescriptor<FavoriteCity>())) ?? []
+    public func loadFavoriteIDs() throws -> Set<Int> {
+        let favorites = try context.fetch(FetchDescriptor<FavoriteCity>())
         return Set(favorites.map(\.cityID))
     }
 
-    public func setFavorite(_ cityID: Int, isFavorite: Bool) {
-        switch (isFavorite, storedFavorite(for: cityID)) {
+    public func setFavorite(_ cityID: Int, isFavorite: Bool) throws {
+        switch (isFavorite, try storedFavorite(for: cityID)) {
         case (true, .none):
             context.insert(FavoriteCity(cityID: cityID))
         case let (false, .some(favorite)):
@@ -39,11 +39,17 @@ public final class SwiftDataFavoritesStore: FavoritesStore {
         default:
             return
         }
-        try? context.save()
+
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
     }
 
-    private func storedFavorite(for cityID: Int) -> FavoriteCity? {
+    private func storedFavorite(for cityID: Int) throws -> FavoriteCity? {
         let descriptor = FetchDescriptor<FavoriteCity>(predicate: #Predicate { $0.cityID == cityID })
-        return try? context.fetch(descriptor).first
+        return try context.fetch(descriptor).first
     }
 }
