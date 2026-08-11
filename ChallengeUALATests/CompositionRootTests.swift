@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import Cities
 @testable import ChallengeUALA
 
 final class CompositionRootTests: XCTestCase {
@@ -20,5 +21,38 @@ final class CompositionRootTests: XCTestCase {
     @MainActor
     func test_makeCityListView_canBeConstructed() {
         _ = CompositionRoot.makeCityListView()
+    }
+
+    @MainActor
+    func test_makeFavoritesStore_remembersFavoritesAcrossAppLaunches() throws {
+        let cityID = testSpecificCityID()
+        try CompositionRoot.makeFavoritesStore().setFavorite(cityID, isFavorite: true)
+
+        let storeAfterRelaunch = CompositionRoot.makeFavoritesStore()
+
+        XCTAssertTrue(try storeAfterRelaunch.loadFavoriteIDs().contains(cityID))
+    }
+
+    @MainActor
+    func test_makeFavoritesStore_forgetsFavoritesRemovedInAPreviousLaunch() throws {
+        let cityID = testSpecificCityID()
+        try CompositionRoot.makeFavoritesStore().setFavorite(cityID, isFavorite: true)
+
+        try CompositionRoot.makeFavoritesStore().setFavorite(cityID, isFavorite: false)
+
+        XCTAssertFalse(try CompositionRoot.makeFavoritesStore().loadFavoriteIDs().contains(cityID))
+    }
+
+    // MARK: - Helpers
+
+    @MainActor
+    private func testSpecificCityID() -> Int {
+        let cityID = 999_999_999
+        addTeardownBlock {
+            await MainActor.run {
+                try? CompositionRoot.makeFavoritesStore().setFavorite(cityID, isFavorite: false)
+            }
+        }
+        return cityID
     }
 }

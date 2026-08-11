@@ -15,8 +15,11 @@ enum CompositionRoot {
     static func makeCityListView() -> CityListView {
         let client = URLSessionHTTPClient()
         let loader = RemoteCityCatalogLoader(url: cityCatalogURL, client: client)
-        let favoritesStore: FavoritesStore = (try? SwiftDataFavoritesStore.makeDefault()) ?? InMemoryFavoritesStore()
-        let viewModel = CityListViewModel(loader: loader, favoritesStore: favoritesStore)
+        let viewModel = CityListViewModel(loader: loader, favoritesStore: makeFavoritesStore())
         return CityListView(viewModel: viewModel)
+    }
+
+    static func makeFavoritesStore() -> FavoritesStore {
+        (try? SwiftDataFavoritesStore.makeDefault()) ?? InMemoryFavoritesStore()
     }
 }
