@@ -11,7 +11,7 @@ import SwiftUI
 struct ChallengeUALAApp: App {
     var body: some Scene {
         WindowGroup {
-            CompositionRoot.makeCityListView()
+            CompositionRoot.makeCityCatalogView()
         }
     }
 }

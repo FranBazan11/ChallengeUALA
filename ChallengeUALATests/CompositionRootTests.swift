@@ -19,8 +19,25 @@ final class CompositionRootTests: XCTestCase {
     }
 
     @MainActor
-    func test_makeCityListView_canBeConstructed() {
-        _ = CompositionRoot.makeCityListView()
+    func test_makeCityCatalogView_canBeConstructed() {
+        _ = CompositionRoot.makeCityCatalogView()
+    }
+
+    func test_makeCityCatalogLoader_withoutACatalogInTheConfiguration_usesTheRemoteLoader() {
+        let loader = CompositionRoot.makeCityCatalogLoader(configuration: AppConfiguration())
+
+        XCTAssertTrue(loader is RemoteCityCatalogLoader)
+    }
+
+    func test_makeCityCatalogLoader_withACatalogInTheConfiguration_deliversThatCatalog() async throws {
+        let hurzuf = City(id: 707860, name: "Hurzuf", countryCode: "UA", latitude: 44.549999, longitude: 34.283333)
+        let loader = CompositionRoot.makeCityCatalogLoader(
+            configuration: AppConfiguration(cityCatalogData: makeCatalogJSON(for: hurzuf))
+        )
+
+        let catalog = try await loader.load()
+
+        XCTAssertEqual(catalog.cities, [hurzuf])
     }
 
     @MainActor
@@ -44,6 +61,16 @@ final class CompositionRootTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private func makeCatalogJSON(for city: City) -> Data {
+        let json: [[String: Any]] = [[
+            "_id": city.id,
+            "name": city.name,
+            "country": city.countryCode,
+            "coord": ["lat": city.latitude, "lon": city.longitude]
+        ]]
+        return try! JSONSerialization.data(withJSONObject: json)
+    }
 
     @MainActor
     private func testSpecificCityID() -> Int {

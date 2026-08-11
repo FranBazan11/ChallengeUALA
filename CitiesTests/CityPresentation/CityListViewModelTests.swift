@@ -371,7 +371,7 @@ final class CityListViewModelTests: XCTestCase {
         XCTAssertEqual(loadedOnMainThread, false)
     }
 
-    func test_toggleFavorite_withTheFavoritesFilterOff_doesNotRepublishTheList() async {
+    func test_toggleFavorite_withTheFavoritesFilterOff_republishesTheVisiblePage() async {
         let cities = makeCities(4)
         let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
         await sut.load()
@@ -381,7 +381,17 @@ final class CityListViewModelTests: XCTestCase {
             sut.toggleFavorite(cityID: cities[0].id)
         }
 
-        XCTAssertFalse(didPublish)
+        XCTAssertTrue(didPublish)
+    }
+
+    func test_toggleFavorite_withTheFavoritesFilterOff_changesExactlyThatCitysCell() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 4)
+        await sut.load()
+
+        sut.toggleFavorite(cityID: cities[1].id)
+
+        expect(sut, toShowFavoriteFlags: [false, true, false, false])
     }
 
     func test_toggleFavorite_withTheFavoritesFilterOn_republishesTheList() async {
@@ -399,6 +409,56 @@ final class CityListViewModelTests: XCTestCase {
         }
 
         XCTAssertTrue(didPublish)
+    }
+
+    func test_init_publishesAnEmptySearchPrefix() {
+        let (sut, _) = makeSUT()
+
+        XCTAssertEqual(sut.searchPrefix, "")
+    }
+
+    func test_search_publishesTheSearchPrefix() {
+        let (sut, _) = makeSUT()
+
+        sut.search(prefix: "al")
+
+        XCTAssertEqual(sut.searchPrefix, "al")
+    }
+
+    func test_init_publishesTheFavoritesFilterTurnedOff() {
+        let (sut, _) = makeSUT()
+
+        XCTAssertFalse(sut.showsFavoritesOnly)
+    }
+
+    func test_setFavoritesOnly_publishesTheFavoritesFilter() {
+        let (sut, _) = makeSUT()
+
+        sut.setFavoritesOnly(true)
+
+        XCTAssertTrue(sut.showsFavoritesOnly)
+    }
+
+    func test_mapViewModel_beforeTheCatalogLoads_deliversNothing() {
+        let (sut, _) = makeSUT()
+
+        XCTAssertNil(sut.mapViewModel(for: 1))
+    }
+
+    func test_mapViewModel_forAVisibleCity_deliversItsCoordinates() async {
+        let hurzuf = makeCity(id: 707860, name: "Hurzuf", countryCode: "UA", latitude: 44.549999, longitude: 34.283333).model
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: [hurzuf]))])
+        await sut.load()
+
+        XCTAssertEqual(sut.mapViewModel(for: hurzuf.id), CityMapViewModel(city: hurzuf))
+    }
+
+    func test_mapViewModel_forACityOutsideTheVisibleWindow_deliversNothing() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
+        await sut.load()
+
+        XCTAssertNil(sut.mapViewModel(for: cities[3].id))
     }
 
     // MARK: - Helpers
@@ -518,10 +578,24 @@ final class CityListViewModelTests: XCTestCase {
         line: UInt = #line
     ) {
         switch sut.state {
-        case let .loaded(results):
-            XCTAssertEqual(Array(results), expectedCities, file: file, line: line)
+        case let .loaded(cells):
+            XCTAssertEqual(cells.map(\.id), expectedCities.map(\.id), file: file, line: line)
         default:
             XCTFail("Expected loaded state with \(expectedCities), got \(sut.state) instead", file: file, line: line)
+        }
+    }
+
+    private func expect(
+        _ sut: CityListViewModel,
+        toShowFavoriteFlags expectedFlags: [Bool],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        switch sut.state {
+        case let .loaded(cells):
+            XCTAssertEqual(cells.map(\.isFavorite), expectedFlags, file: file, line: line)
+        default:
+            XCTFail("Expected loaded state with \(expectedFlags), got \(sut.state) instead", file: file, line: line)
         }
     }
 

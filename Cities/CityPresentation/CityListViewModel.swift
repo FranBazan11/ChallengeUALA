@@ -14,7 +14,7 @@ public final class CityListViewModel: Sendable {
     @frozen
     public enum State {
         case loading
-        case loaded(CitySearchResults)
+        case loaded([CityCellViewModel])
         case failed(message: String)
     }
 
@@ -22,6 +22,8 @@ public final class CityListViewModel: Sendable {
     public static let invalidDataErrorMessage = "Ocurrió un error inesperado. Intentá de nuevo."
 
     public private(set) var state: State = .loading
+    public private(set) var searchPrefix = ""
+    public private(set) var showsFavoritesOnly = false
 
     private let loader: CityCatalogLoader
     private let favoritesStore: FavoritesStore
@@ -29,9 +31,7 @@ public final class CityListViewModel: Sendable {
     private var catalog: CityCatalog?
     private var matchingResults: CitySearchResults?
     private var visibleCount: Int
-    private var currentPrefix = ""
     private var favoriteIDs: Set<Int>
-    private var showsFavoritesOnly = false
 
     public init(loader: CityCatalogLoader, favoritesStore: FavoritesStore, pageSize: Int = 50) {
         self.loader = loader
@@ -60,7 +60,7 @@ public final class CityListViewModel: Sendable {
     }
 
     public func search(prefix: String) {
-        currentPrefix = prefix
+        searchPrefix = prefix
         visibleCount = pageSize
         refreshResults()
     }
@@ -85,8 +85,12 @@ public final class CityListViewModel: Sendable {
         } else {
             favoriteIDs.remove(cityID)
         }
-        guard showsFavoritesOnly else { return }
-        refreshResults()
+
+        if showsFavoritesOnly {
+            refreshResults()
+        } else {
+            publishVisibleResults()
+        }
     }
 
     public func showMoreResults(after cityID: Int) {
@@ -104,15 +108,29 @@ public final class CityListViewModel: Sendable {
         favoriteIDs.contains(cityID)
     }
 
+    public func mapViewModel(for cityID: Int) -> CityMapViewModel? {
+        guard let matchingResults else { return nil }
+        return matchingResults
+            .limited(to: visibleCount)
+            .first { $0.id == cityID }
+            .map(CityMapViewModel.init)
+    }
+
     private func refreshResults() {
         guard let catalog else { return }
-        let results = catalog.search(prefix: currentPrefix)
+        let results = catalog.search(prefix: searchPrefix)
         matchingResults = showsFavoritesOnly ? results.filter(byFavoriteIDs: favoriteIDs) : results
         publishVisibleResults()
     }
 
     private func publishVisibleResults() {
         guard let matchingResults else { return }
-        state = .loaded(matchingResults.limited(to: visibleCount))
+        state = .loaded(visibleCells(of: matchingResults))
+    }
+
+    private func visibleCells(of results: CitySearchResults) -> [CityCellViewModel] {
+        results.limited(to: visibleCount).map {
+            CityCellViewModel(city: $0, isFavorite: favoriteIDs.contains($0.id))
+        }
     }
 }
