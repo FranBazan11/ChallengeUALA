@@ -172,6 +172,7 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 - **Dado** una ciudad en la lista, **cuando** toco su ícono de favorito, **entonces** queda marcada como favorita inmediatamente
 - **Dado** una ciudad ya favorita, **cuando** toco su ícono de favorito, **entonces** se desmarca
 - **Dado** que marqué una ciudad como favorita, **cuando** cierro y reabro la app, **entonces** sigue marcada como favorita
+- **Dado** que la persistencia falla (disco lleno, store corrupto), **cuando** toco el ícono de favorito, **entonces** la estrella **no** queda marcada — la pantalla no me muestra como guardado algo que no se guardó
 
 ### Use Case: Toggle Favorite City
 
@@ -184,6 +185,21 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 **Curso alternativo — toggle repetido sobre la misma ciudad:**
 1. El sistema aplica el último estado solicitado, sin duplicar entradas
 
+**Curso alternativo — falla la persistencia:**
+1. El sistema no cambia el estado de favorito que tiene en memoria
+2. El sistema deja la ciudad tal como estaba, sin inventar entradas ni borrar las existentes
+
+**Curso alternativo — falla la lectura inicial de favoritos:**
+1. El sistema arranca sin ningún favorito conocido, sin crashear
+
+### Contrato
+
+El módulo `Cities` define `FavoritesStore` con dos operaciones, **las dos capaces de fallar**: leer el conjunto de ids favoritos y fijar el estado de favorito de una ciudad. Lo define el dominio; la implementación con SwiftData vive en `CityFavoritesInfrastructure/`, y `InMemoryFavoritesStore` queda al lado como fallback.
+
+El error es `throws` pelado, **no** typed throws como `CityCatalogLoadError`. Es el mismo criterio con el que la Historia 3 dejó `HTTPClient.get` sin acotar: es el borde con un framework de persistencia que falla de formas que no se pueden enumerar de antemano, y cerrar ese set sería prometer una garantía imposible de sostener.
+
+Que la operación pueda fallar es lo que le permite al ViewModel no mentir: si la escritura no salió bien, el estado en memoria no se toca y la estrella no se prende.
+
 ### Checklist
 
 - [x] Marcar una ciudad no favorita la deja favorita
@@ -191,6 +207,10 @@ El módulo `Cities` define un protocolo `HTTPClient` con una única operación d
 - [x] El estado persiste entre instancias del store (simulando reinicio de la app)
 - [x] Alternar dos veces sobre la misma ciudad no genera estado inconsistente ni entradas duplicadas
 - [x] El ViewModel depende del protocolo `FavoritesStore`, no de SwiftData directamente
+- [x] Un fallo al persistir deja la ciudad con el estado de favorito que ya tenía
+- [x] Un fallo al persistir no cambia la lista visible cuando el filtro de favoritos está prendido
+- [x] Un fallo al leer los favoritos al arrancar deja el sistema sin favoritos, sin crashear
+- [x] El camino de persistencia que arma el Composition Root recuerda los favoritos entre lanzamientos
 
 ---
 
@@ -524,4 +544,6 @@ La paginación es una decisión de presentación, no de dominio: `CityCatalog` s
 - [x] Marcar un favorito con el filtro apagado no republica la lista
 - [x] Marcar un favorito con el filtro prendido conserva la ventana y actualiza la lista
 - [x] `limited(to:)` acota respetando el orden, y con un tope mayor al total entrega todo
+- [x] `limited(to:)` con un tope negativo entrega una lista vacía, no un crash
+- [x] Un tamaño de página no positivo entrega igual una primera página y puede seguir creciendo
 - [x] Verificación en la app real contra el gist: primera tecla, borrado hasta vacío, toggle sin prefijo y scroll hasta el fondo, sin trabas
