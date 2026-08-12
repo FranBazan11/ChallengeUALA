@@ -42,3 +42,43 @@ func makeCity(
 func makeCatalogJSON(_ cities: [[String: Any]]) -> Data {
     try! JSONSerialization.data(withJSONObject: cities)
 }
+
+let largeCityListSize = 200_000
+
+func makeLargeCityList(count: Int = largeCityListSize) -> [City] {
+    let alphabet = Array("abcdefghijklmnopqrstuvwxyz")
+
+    return (0..<count).map { index in
+        let name = String([
+            alphabet[index % 26],
+            alphabet[(index / 26) % 26],
+            alphabet[(index / 676) % 26],
+            alphabet[(index / 17_576) % 26]
+        ])
+
+        return City(
+            id: index,
+            name: name + String(index),
+            countryCode: "US",
+            latitude: 0,
+            longitude: 0
+        )
+    }
+}
+
+actor CityCatalogLoaderStub: CityCatalogLoader {
+    private var results: [Result<CityCatalog, CityCatalogLoadError>]
+
+    init(results: [Result<CityCatalog, CityCatalogLoadError>]) {
+        self.results = results
+    }
+
+    func load() async throws(CityCatalogLoadError) -> CityCatalog {
+        switch results.removeFirst() {
+        case let .success(catalog):
+            return catalog
+        case let .failure(error):
+            throw error
+        }
+    }
+}
