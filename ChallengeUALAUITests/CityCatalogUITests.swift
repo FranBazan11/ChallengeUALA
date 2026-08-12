@@ -10,7 +10,10 @@ import XCTest
 final class CityCatalogUITests: XCTestCase {
 
     override func tearDown() {
-        MainActor.assumeIsolated { XCUIDevice.shared.orientation = .portrait }
+        MainActor.assumeIsolated {
+            XCUIApplication().terminate()
+            XCUIDevice.shared.orientation = .portrait
+        }
         super.tearDown()
     }
 
@@ -86,9 +89,27 @@ final class CityCatalogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[emptyMapMessage].exists, "no se ve el panel de mapa junto a la lista")
     }
 
+    @MainActor
+    func test_selectingACityInLandscape_marksItsRowAsSelected() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let app = launchAppWithTestCatalog()
+
+        firstCity(in: app).tap()
+
+        XCTAssertTrue(
+            row(for: UITestCityCatalog.firstCityName, in: app).isSelected,
+            "la fila de la ciudad que está en el mapa no quedó marcada como seleccionada"
+        )
+    }
+
     // MARK: - Helpers
 
     private var emptyMapMessage: String { "Elegí una ciudad para verla en el mapa" }
+
+    @MainActor
+    private func row(for cityName: String, in app: XCUIApplication) -> XCUIElement {
+        app.staticTexts["\(cityName), AR"]
+    }
 
     @MainActor
     private func scrollToTheEnd(of app: XCUIApplication, swipes: Int = 12) {

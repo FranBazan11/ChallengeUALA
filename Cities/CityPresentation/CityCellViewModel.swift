@@ -10,11 +10,13 @@ public struct CityCellViewModel: Equatable, Identifiable, Sendable {
     public let title: String
     public let subtitle: String
     public let isFavorite: Bool
+    public let isSelected: Bool
 
-    public init(city: City, isFavorite: Bool) {
+    public init(city: City, isFavorite: Bool, isSelected: Bool) {
         id = city.id
         title = "\(city.name), \(city.countryCode)"
         subtitle = "\(city.latitude), \(city.longitude)"
         self.isFavorite = isFavorite
+        self.isSelected = isSelected
     }
 }

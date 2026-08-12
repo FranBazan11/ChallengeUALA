@@ -5,6 +5,7 @@
 //  Created by Juan Francisco Bazan Carrizo on 08/08/2026.
 //
 
+import Foundation
 import Observation
 
 @Observable
@@ -14,7 +15,7 @@ public final class CityListViewModel: Sendable {
     @frozen
     public enum State {
         case loading
-        case loaded([CityCellViewModel])
+        case loaded(CityCellViewModels)
         case failed(message: String)
     }
 
@@ -28,15 +29,23 @@ public final class CityListViewModel: Sendable {
     private let loader: CityCatalogLoader
     private let favoritesStore: FavoritesStore
     private let pageSize: Int
+    private let locale: Locale
     private var catalog: CityCatalog?
     private var matchingResults: CitySearchResults?
     private var visibleCount: Int
     private var favoriteIDs: Set<Int>
+    private var selectedCity: City?
 
-    public init(loader: CityCatalogLoader, favoritesStore: FavoritesStore, pageSize: Int = 50) {
+    public init(
+        loader: CityCatalogLoader,
+        favoritesStore: FavoritesStore,
+        pageSize: Int = 50,
+        locale: Locale = .current
+    ) {
         self.loader = loader
         self.favoritesStore = favoritesStore
         self.pageSize = max(1, pageSize)
+        self.locale = locale
         visibleCount = self.pageSize
         favoriteIDs = (try? favoritesStore.loadFavoriteIDs()) ?? []
     }
@@ -108,12 +117,23 @@ public final class CityListViewModel: Sendable {
         favoriteIDs.contains(cityID)
     }
 
-    public func mapViewModel(for cityID: Int) -> CityMapViewModel? {
-        guard let matchingResults else { return nil }
-        return matchingResults
-            .limited(to: visibleCount)
-            .first { $0.id == cityID }
-            .map(CityMapViewModel.init)
+    public var selectedMapViewModel: CityMapViewModel? {
+        selectedCity.map(CityMapViewModel.init)
+    }
+
+    public func selectCity(withID cityID: Int?) {
+        selectedCity = cityID.flatMap(visibleCity)
+        publishVisibleResults()
+    }
+
+    public func detailViewModel(for cityID: Int) -> CityDetailViewModel? {
+        visibleCity(withID: cityID).map {
+            CityDetailViewModel(city: $0, isFavorite: favoriteIDs.contains($0.id), locale: locale)
+        }
+    }
+
+    private func visibleCity(withID cityID: Int) -> City? {
+        matchingResults?.limited(to: visibleCount).first { $0.id == cityID }
     }
 
     private func refreshResults() {
@@ -125,12 +145,12 @@ public final class CityListViewModel: Sendable {
 
     private func publishVisibleResults() {
         guard let matchingResults else { return }
-        state = .loaded(visibleCells(of: matchingResults))
-    }
-
-    private func visibleCells(of results: CitySearchResults) -> [CityCellViewModel] {
-        results.limited(to: visibleCount).map {
-            CityCellViewModel(city: $0, isFavorite: favoriteIDs.contains($0.id))
-        }
+        state = .loaded(
+            CityCellViewModels(
+                results: matchingResults.limited(to: visibleCount),
+                favoriteIDs: favoriteIDs,
+                selectedCityID: selectedCity?.id
+            )
+        )
     }
 }

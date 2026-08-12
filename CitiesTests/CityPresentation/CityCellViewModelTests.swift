@@ -47,6 +47,18 @@ final class CityCellViewModelTests: XCTestCase {
         XCTAssertNotEqual(favorite, notFavorite)
     }
 
+    func test_init_takesIsSelectedFromTheCaller() {
+        XCTAssertTrue(makeSUT(isSelected: true).isSelected)
+        XCTAssertFalse(makeSUT(isSelected: false).isSelected)
+    }
+
+    func test_equatable_withDifferentIsSelected_areNotEqual() {
+        let selected = makeSUT(id: 1, isSelected: true)
+        let notSelected = makeSUT(id: 1, isSelected: false)
+
+        XCTAssertNotEqual(selected, notSelected)
+    }
+
     // MARK: - Helpers
 
     private func makeSUT(
@@ -55,9 +67,10 @@ final class CityCellViewModelTests: XCTestCase {
         countryCode: String = "any country",
         latitude: Double = 0,
         longitude: Double = 0,
-        isFavorite: Bool = false
+        isFavorite: Bool = false,
+        isSelected: Bool = false
     ) -> CityCellViewModel {
         let city = City(id: id, name: name, countryCode: countryCode, latitude: latitude, longitude: longitude)
-        return CityCellViewModel(city: city, isFavorite: isFavorite)
+        return CityCellViewModel(city: city, isFavorite: isFavorite, isSelected: isSelected)
     }
 }

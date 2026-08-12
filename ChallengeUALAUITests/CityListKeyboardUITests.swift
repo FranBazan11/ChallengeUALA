@@ -13,7 +13,7 @@ final class CityListKeyboardUITests: XCTestCase {
     func test_tappingOnTheLoadedList_dismissesTheKeyboard() {
         let app = launchWithKeyboardShownOverTheLoadedList()
 
-        app.buttons["Agregar a favoritos"].firstMatch.tap()
+        favoriteButton(in: app).tap()
 
         XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5), "el teclado no se escondió")
     }
@@ -45,6 +45,12 @@ final class CityListKeyboardUITests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private func favoriteButton(in app: XCUIApplication) -> XCUIElement {
+        app.buttons
+            .matching(NSPredicate(format: "label IN {'Agregar a favoritos', 'Quitar de favoritos'}"))
+            .firstMatch
+    }
 
     private func launchWithKeyboardShownOverTheLoadedList(
         file: StaticString = #filePath,
