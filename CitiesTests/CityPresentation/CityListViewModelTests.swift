@@ -439,29 +439,130 @@ final class CityListViewModelTests: XCTestCase {
         XCTAssertTrue(sut.showsFavoritesOnly)
     }
 
-    func test_mapViewModel_beforeTheCatalogLoads_deliversNothing() {
+    func test_init_hasNoSelectedCity() {
         let (sut, _) = makeSUT()
 
-        XCTAssertNil(sut.mapViewModel(for: 1))
+        XCTAssertNil(sut.selectedMapViewModel)
     }
 
-    func test_mapViewModel_forAVisibleCity_deliversItsCoordinates() async {
+    func test_selectCity_beforeTheCatalogLoads_selectsNothing() {
+        let (sut, _) = makeSUT()
+
+        sut.selectCity(withID: 1)
+
+        XCTAssertNil(sut.selectedMapViewModel)
+    }
+
+    func test_selectCity_forAVisibleCity_deliversItsCoordinates() async {
         let hurzuf = makeCity(id: 707860, name: "Hurzuf", countryCode: "UA", latitude: 44.549999, longitude: 34.283333).model
         let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: [hurzuf]))])
         await sut.load()
 
-        XCTAssertEqual(sut.mapViewModel(for: hurzuf.id), CityMapViewModel(city: hurzuf))
+        sut.selectCity(withID: hurzuf.id)
+
+        XCTAssertEqual(sut.selectedMapViewModel, CityMapViewModel(city: hurzuf))
     }
 
-    func test_mapViewModel_forACityOutsideTheVisibleWindow_deliversNothing() async {
+    func test_selectCity_forACityOutsideTheVisibleWindow_selectsNothing() async {
         let cities = makeCities(4)
         let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
         await sut.load()
 
-        XCTAssertNil(sut.mapViewModel(for: cities[3].id))
+        sut.selectCity(withID: cities[3].id)
+
+        XCTAssertNil(sut.selectedMapViewModel)
+    }
+
+    func test_selectCity_marksOnlyThatCityCellAsSelected() async {
+        let cities = makeCities(3)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))])
+        await sut.load()
+
+        sut.selectCity(withID: cities[1].id)
+
+        expect(sut, toShowSelectionFlags: [false, true, false])
+    }
+
+    func test_selectCity_calledAgainOnAnotherCity_movesTheSelection() async {
+        let cities = makeCities(3)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))])
+        await sut.load()
+        sut.selectCity(withID: cities[1].id)
+
+        sut.selectCity(withID: cities[2].id)
+
+        expect(sut, toShowSelectionFlags: [false, false, true])
+    }
+
+    func test_selectCity_withNoID_clearsTheSelection() async {
+        let cities = makeCities(3)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))])
+        await sut.load()
+        sut.selectCity(withID: cities[1].id)
+
+        sut.selectCity(withID: nil)
+
+        XCTAssertNil(sut.selectedMapViewModel)
+    }
+
+    func test_selectCity_withNoID_leavesEveryCellUnselected() async {
+        let cities = makeCities(3)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))])
+        await sut.load()
+        sut.selectCity(withID: cities[1].id)
+
+        sut.selectCity(withID: nil)
+
+        expect(sut, toShowSelectionFlags: [false, false, false])
+    }
+
+    func test_search_keepsTheCityAlreadyShownOnTheMap() async {
+        let hurzuf = makeCity(id: 707860, name: "Hurzuf", countryCode: "UA", latitude: 44.549999, longitude: 34.283333).model
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: [hurzuf, makeAlabama()]))])
+        await sut.load()
+        sut.selectCity(withID: hurzuf.id)
+
+        sut.search(prefix: "Alabama")
+
+        XCTAssertEqual(sut.selectedMapViewModel, CityMapViewModel(city: hurzuf))
+    }
+
+    func test_detailViewModel_beforeTheCatalogLoads_deliversNothing() {
+        let (sut, _) = makeSUT()
+
+        XCTAssertNil(sut.detailViewModel(for: 1))
+    }
+
+    func test_detailViewModel_forAVisibleCity_deliversItsDetail() async {
+        let hurzuf = makeCity(id: 707860, name: "Hurzuf", countryCode: "UA", latitude: 44.549999, longitude: 34.283333).model
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: [hurzuf]))])
+        await sut.load()
+
+        XCTAssertEqual(
+            sut.detailViewModel(for: hurzuf.id),
+            CityDetailViewModel(city: hurzuf, isFavorite: false, locale: Self.testLocale)
+        )
+    }
+
+    func test_detailViewModel_forAFavoriteCity_marksItAsFavorite() async {
+        let hurzuf = makeCity(id: 707860, name: "Hurzuf", countryCode: "UA", latitude: 44.549999, longitude: 34.283333).model
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: [hurzuf]))], favoriteIDs: [hurzuf.id])
+        await sut.load()
+
+        XCTAssertEqual(sut.detailViewModel(for: hurzuf.id)?.isFavorite, true)
+    }
+
+    func test_detailViewModel_forACityOutsideTheVisibleWindow_deliversNothing() async {
+        let cities = makeCities(4)
+        let (sut, _) = makeSUT(loaderResults: [.success(CityCatalog(cities: cities))], pageSize: 2)
+        await sut.load()
+
+        XCTAssertNil(sut.detailViewModel(for: cities[3].id))
     }
 
     // MARK: - Helpers
+
+    private static let testLocale = Locale(identifier: "es_AR")
 
     private func makeSUT(
         loaderResults: [Result<CityCatalog, CityCatalogLoadError>] = [.success(CityCatalog(cities: []))],
@@ -469,12 +570,13 @@ final class CityListViewModelTests: XCTestCase {
         loadError: Error? = nil,
         setError: Error? = nil,
         pageSize: Int = 50,
+        locale: Locale = CityListViewModelTests.testLocale,
         file: StaticString = #filePath,
         line: UInt = #line
     ) -> (sut: CityListViewModel, favoritesStore: FavoritesStoreSpy) {
         let loader = CityCatalogLoaderStub(results: loaderResults)
         let favoritesStore = FavoritesStoreSpy(favoriteIDs: favoriteIDs, loadError: loadError, setError: setError)
-        let sut = CityListViewModel(loader: loader, favoritesStore: favoritesStore, pageSize: pageSize)
+        let sut = CityListViewModel(loader: loader, favoritesStore: favoritesStore, pageSize: pageSize, locale: locale)
         trackForMemoryLeaks(sut, file: file, line: line)
         trackForMemoryLeaks(favoritesStore, file: file, line: line)
         return (sut, favoritesStore)
@@ -594,6 +696,20 @@ final class CityListViewModelTests: XCTestCase {
         switch sut.state {
         case let .loaded(cells):
             XCTAssertEqual(cells.map(\.isFavorite), expectedFlags, file: file, line: line)
+        default:
+            XCTFail("Expected loaded state with \(expectedFlags), got \(sut.state) instead", file: file, line: line)
+        }
+    }
+
+    private func expect(
+        _ sut: CityListViewModel,
+        toShowSelectionFlags expectedFlags: [Bool],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        switch sut.state {
+        case let .loaded(cells):
+            XCTAssertEqual(cells.map(\.isSelected), expectedFlags, file: file, line: line)
         default:
             XCTFail("Expected loaded state with \(expectedFlags), got \(sut.state) instead", file: file, line: line)
         }
