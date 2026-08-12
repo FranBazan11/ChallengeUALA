@@ -613,23 +613,6 @@ final class CityListViewModelTests: XCTestCase {
         }
     }
 
-    private actor CityCatalogLoaderStub: CityCatalogLoader {
-        private var results: [Result<CityCatalog, CityCatalogLoadError>]
-
-        init(results: [Result<CityCatalog, CityCatalogLoadError>]) {
-            self.results = results
-        }
-
-        func load() async throws(CityCatalogLoadError) -> CityCatalog {
-            switch results.removeFirst() {
-            case let .success(catalog):
-                return catalog
-            case let .failure(error):
-                throw error
-            }
-        }
-    }
-
     private actor MainThreadRecorder {
         private(set) var loadedOnMainThread: Bool?
 

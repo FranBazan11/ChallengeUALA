@@ -42,28 +42,7 @@ final class CityCatalogPerformanceTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private let catalogSize = 200_000
+    private let catalogSize = largeCityListSize
     private let favoriteCount = 20
     private let visibleRowsOnScreen = 50
-
-    private func makeLargeCityList() -> [City] {
-        let alphabet = Array("abcdefghijklmnopqrstuvwxyz")
-
-        return (0..<catalogSize).map { index in
-            let name = String([
-                alphabet[index % 26],
-                alphabet[(index / 26) % 26],
-                alphabet[(index / 676) % 26],
-                alphabet[(index / 17_576) % 26]
-            ])
-
-            return City(
-                id: index,
-                name: name + String(index),
-                countryCode: "US",
-                latitude: 0,
-                longitude: 0
-            )
-        }
-    }
 }
