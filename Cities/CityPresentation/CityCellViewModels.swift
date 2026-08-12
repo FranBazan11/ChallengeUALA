@@ -8,10 +8,12 @@
 public struct CityCellViewModels: RandomAccessCollection, Sendable {
     private let results: CitySearchResults
     private let favoriteIDs: Set<Int>
+    private let selectedCityID: Int?
 
-    init(results: CitySearchResults, favoriteIDs: Set<Int>) {
+    init(results: CitySearchResults, favoriteIDs: Set<Int>, selectedCityID: Int?) {
         self.results = results
         self.favoriteIDs = favoriteIDs
+        self.selectedCityID = selectedCityID
     }
 
     public var startIndex: Int { results.startIndex }
@@ -20,6 +22,10 @@ public struct CityCellViewModels: RandomAccessCollection, Sendable {
 
     public subscript(position: Int) -> CityCellViewModel {
         let city = results[position]
-        return CityCellViewModel(city: city, isFavorite: favoriteIDs.contains(city.id))
+        return CityCellViewModel(
+            city: city,
+            isFavorite: favoriteIDs.contains(city.id),
+            isSelected: city.id == selectedCityID
+        )
     }
 }

@@ -19,8 +19,6 @@ struct CityMapView: View {
             Map(position: $position) {
                 Marker(viewModel.title, coordinate: coordinate(of: viewModel))
             }
-            .navigationTitle(viewModel.title)
-            .navigationBarTitleDisplayMode(.inline)
             .onChange(of: viewModel, initial: true) { _, selected in
                 position = .region(region(of: selected))
             }

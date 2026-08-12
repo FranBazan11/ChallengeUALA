@@ -11,6 +11,7 @@ import Cities
 struct CityCellView: View {
     let viewModel: CityCellViewModel
     let onToggleFavorite: () -> Void
+    let onShowDetail: () -> Void
 
     var body: some View {
         HStack {
@@ -23,6 +24,13 @@ struct CityCellView: View {
             }
 
             Spacer()
+
+            Button(action: onShowDetail) {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.tint)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Ver información de \(viewModel.title)")
 
             Button(action: onToggleFavorite) {
                 Image(systemName: viewModel.isFavorite ? "star.fill" : "star")

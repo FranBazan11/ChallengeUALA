@@ -11,6 +11,7 @@ import Cities
 struct CityListView: View {
     let viewModel: CityListViewModel
     let onSelect: (Int) -> Void
+    let onShowDetail: (Int) -> Void
     let onRetry: () -> Void
 
     @FocusState private var isFilterFocused: Bool
@@ -65,11 +66,14 @@ struct CityListView: View {
                 List(cells) { cell in
                     CityCellView(
                         viewModel: cell,
-                        onToggleFavorite: { viewModel.toggleFavorite(cityID: cell.id) }
+                        onToggleFavorite: { viewModel.toggleFavorite(cityID: cell.id) },
+                        onShowDetail: { onShowDetail(cell.id) }
                     )
                     .contentShape(Rectangle())
                     .onTapGesture { onSelect(cell.id) }
                     .onAppear { viewModel.showMoreResults(after: cell.id) }
+                    .listRowBackground(cell.isSelected ? Color.secondary.opacity(0.2) : nil)
+                    .accessibilityAddTraits(cell.isSelected ? .isSelected : [])
                 }
                 .listStyle(.plain)
                 .scrollDismissesKeyboard(.immediately)

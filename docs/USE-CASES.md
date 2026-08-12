@@ -262,21 +262,33 @@ Que la operación pueda fallar es lo que le permite al ViewModel no mentir: si l
 - **Dado** que estoy en landscape, **cuando** toco una ciudad, **entonces** el mapa se actualiza en el panel derecho, sin navegar a otra pantalla
 - **Dado** que estoy en landscape con una ciudad ya dibujada en el mapa, **cuando** toco otra ciudad de la lista, **entonces** el mapa se recentra en la nueva sin que yo haga nada más
 - **Dado** que estoy en landscape y todavía no toqué ninguna ciudad, **cuando** miro el panel derecho, **entonces** veo una invitación a elegir una, no un mapa en cualquier lado
+- **Dado** que estoy en landscape con una ciudad dibujada en el mapa, **cuando** miro la lista, **entonces** la fila de esa ciudad se ve destacada — sin eso, con la lista y el mapa a la vista al mismo tiempo, no hay forma de saber cuál de las filas es la que está en el panel derecho
+- **Dado** que hay una ciudad destacada, **cuando** toco otra, **entonces** el destaque se mueve a la nueva y queda exactamente una fila destacada
+- **Dado** que hay una ciudad seleccionada, **cuando** cambio el filtro de texto, **entonces** el mapa sigue mostrando esa ciudad — escribir no borra lo que estaba mirando
 
 ### Use Case: Show City On Map
 
-**Data (input):** id de la ciudad tocada en la lista
+**Data (input):** id de la ciudad tocada en la lista, o ninguno para deseleccionar
 
 **Curso primario (happy path):**
 1. El sistema ubica la ciudad tocada entre los resultados visibles
-2. El sistema entrega su título y sus coordenadas, ya listos para dibujar
-3. El sistema centra el mapa en esas coordenadas, con un radio fijo alrededor
+2. El sistema la recuerda como la ciudad seleccionada
+3. El sistema entrega su título y sus coordenadas, ya listos para dibujar, y marca su fila como seleccionada
+4. El sistema centra el mapa en esas coordenadas, con un radio fijo alrededor
 
 **Curso alternativo — todavía no hay ninguna ciudad seleccionada:**
 1. El sistema no centra ningún mapa y muestra una invitación a elegir una ciudad
+2. Ninguna fila queda destacada
 
 **Curso alternativo — la ciudad pedida no está entre los resultados visibles:**
-1. El sistema no entrega datos de mapa y la selección vigente no cambia
+1. El sistema no entrega datos de mapa y queda sin ciudad seleccionada
+
+**Curso alternativo — se deselecciona (volver atrás desde el mapa en portrait):**
+1. El sistema deja de tener ciudad seleccionada y ninguna fila queda destacada
+
+**Curso alternativo — cambia la consulta con una ciudad ya seleccionada:**
+1. El sistema conserva la ciudad seleccionada y lo que el mapa está mostrando
+2. Si esa ciudad no está entre los resultados nuevos, simplemente no hay ninguna fila destacada, sin perder el mapa
 
 ### Contrato
 
@@ -284,7 +296,13 @@ El módulo `Cities` define `CityMapViewModel` en `CityPresentation/`: un struct 
 
 El radio va en **metros y no en grados**. Un grado de latitud mide siempre lo mismo, pero uno de longitud se encoge con el coseno de la latitud: la misma región expresada en grados se ve angosta cerca del ecuador y ancha cerca de los polos. En metros, el encuadre es el mismo para Hurzuf que para Ushuaia.
 
-Quién resuelve la selección: `CityListViewModel.mapViewModel(for cityID:)`, una query pura sobre la ventana visible — un tap solo puede venir de una fila en pantalla, así que no hace falta recorrer el catálogo. Es lo que permite que `CitiesiOS` no instancie **ningún** tipo de `Cities`: la vista recibe view models ya armados y devuelve ids. La regla de *"ningún módulo instancia componentes de otro módulo"* pasa a estar sostenida por la forma de la API y no por disciplina.
+**Quién es dueño de la selección: `CityListViewModel`, no la vista** *(desde el MR #9)*. Expone el comando `selectCity(withID:)` y las queries `selectedCityID` y `selectedMapViewModel`. El MR #8 la había puesto como `@State` de `CityCatalogView`, que alcanzaba mientras el único consumidor era el panel del mapa; en cuanto la **fila también tiene que saberse seleccionada**, dejarla en la vista obliga a que la celda compare ids por su cuenta y reaparece el patrón de dos lugares que saben lo mismo — exactamente lo que el hallazgo W14 marcó para el prefijo y el flag de favoritos. Con la selección en el view model hay una sola fuente de verdad, `isSelected` viaja adentro de `CityCellViewModel` igual que `isFavorite`, y la regla queda cubierta por tests unitarios rápidos en vez de depender solo de un test de UI.
+
+Es además la razón por la que `mapViewModel(for cityID:)` deja de existir: era una query que le servía a la vista para armarse su propio estado. Su reemplazo es el par comando/query, con CQS intacto — `selectCity(withID:)` no devuelve nada, `selectedMapViewModel` no tiene efectos.
+
+**La selección guarda la ciudad, no solo su id.** Si guardara el id y resolviera la ciudad contra los resultados vigentes, tipear un filtro que excluya a la ciudad seleccionada borraría el mapa mientras el usuario escribe. Guardando la `City`, el mapa sobrevive al filtro y lo único que desaparece es el destaque de la fila —que es correcto: esa fila no está en pantalla—, y vuelve solo si el filtro se afloja.
+
+Sostiene igual que antes que `CitiesiOS` no instancie **ningún** tipo de `Cities`: la vista manda ids y recibe view models ya armados. La regla de *"ningún módulo instancia componentes de otro módulo"* está sostenida por la forma de la API y no por disciplina.
 
 No hace falta ningún protocolo nuevo: el mapa no carga datos, dibuja coordenadas que el catálogo ya tiene en memoria.
 
@@ -292,11 +310,19 @@ No hace falta ningún protocolo nuevo: el mapa no carga datos, dibuja coordenada
 
 - [x] El view model de mapa arma el título combinando nombre y código de país
 - [x] El view model de mapa conserva las coordenadas de la ciudad sin transformarlas
-- [x] Pedir el view model de mapa de una ciudad visible entrega sus coordenadas
-- [x] Pedir el view model de mapa de una ciudad fuera de la ventana visible no entrega nada
-- [x] Pedir el view model de mapa antes de que el catálogo cargue no entrega nada
-- [ ] Seleccionar una ciudad actualiza la región visible del mapa
-- [ ] Seleccionar otra ciudad con el mapa ya dibujado lo recentra
+- [x] Seleccionar una ciudad visible entrega sus coordenadas para el mapa
+- [x] Seleccionar una ciudad fuera de la ventana visible no deja nada seleccionado
+- [x] Seleccionar antes de que el catálogo cargue no deja nada seleccionado
+- [x] Al arrancar no hay ninguna ciudad seleccionada
+- [x] Seleccionar una ciudad marca su celda como seleccionada
+- [x] Seleccionar una ciudad marca exactamente una celda, no más
+- [x] Seleccionar otra ciudad mueve el destaque a la nueva
+- [x] Deseleccionar deja el mapa sin ciudad y ninguna celda destacada
+- [x] Cambiar el prefijo conserva la ciudad seleccionada y lo que muestra el mapa
+- [x] Dos celdas con los mismos datos pero distinto estado de selección no son iguales
+- [x] En landscape, la fila de la ciudad que está en el mapa se ve seleccionada
+- [x] Seleccionar una ciudad actualiza la región visible del mapa *(cubierto en el MR #9; muere si se desconecta el `onSelect` de `CityCatalogView`)*
+- [x] Seleccionar otra ciudad con el mapa ya dibujado lo recentra *(cubierto en el MR #9; muere si `CityMapView` vuelve a `Map(initialPosition:)`)*
 - [x] Sin ciudad seleccionada, el mapa muestra la invitación a elegir una
 - [x] En portrait, seleccionar una ciudad navega a la pantalla de mapa
 - [x] En landscape, seleccionar una ciudad actualiza el panel de mapa sin navegar
@@ -313,21 +339,70 @@ No hace falta ningún protocolo nuevo: el mapa no carga datos, dibuja coordenada
 ### Escenarios
 
 - **Dado** una ciudad en la lista, **cuando** toco su botón de información, **entonces** se abre la pantalla de detalle de esa ciudad
-- **Dado** la pantalla de detalle abierta, **cuando** la miro, **entonces** veo datos que no están en la celda de la lista
+- **Dado** la pantalla de detalle abierta, **cuando** la miro, **entonces** veo datos que no están en la celda de la lista: el nombre completo del país, las coordenadas en grados/minutos/segundos y el identificador de la ciudad
+- **Dado** que estoy en portrait, **cuando** toco el botón de información, **entonces** se abre el detalle; **y dado** que estoy en landscape, **cuando** toco el mismo botón, **entonces** se abre el mismo detalle, de la misma forma
+- **Dado** el detalle abierto, **cuando** toco su ícono de favorito, **entonces** la ciudad queda marcada o desmarcada igual que desde la lista
+- **Dado** una ciudad cuyo código de país no corresponde a ninguna región conocida, **cuando** abro su detalle, **entonces** veo el código tal cual, no un espacio vacío ni un texto de error
+- **Dado** el botón de información de una fila, **cuando** lo toco, **entonces** se abre el detalle y **no** se navega al mapa — son dos acciones distintas sobre la misma celda
 
 ### Use Case: Show City Detail
 
-**Data (input):** id de la ciudad seleccionada
+**Data (input):** id de la ciudad tocada en la lista
 
 **Curso primario (happy path):**
-1. El sistema busca la ciudad por id en el catálogo
-2. El sistema entrega los datos a mostrar en el detalle
+1. El sistema ubica la ciudad tocada entre los resultados visibles
+2. El sistema deriva el nombre completo del país a partir de su código
+3. El sistema convierte las coordenadas a grados, minutos y segundos, con su hemisferio
+4. El sistema entrega el título, el país, las coordenadas, el identificador, el estado de favorito y los datos de mapa, ya listos para dibujar
+
+**Curso alternativo — el código de país no corresponde a ninguna región conocida:**
+1. El sistema entrega el código de país tal como vino, sin inventar un nombre ni dejar el campo vacío
+
+**Curso alternativo — la ciudad pedida no está entre los resultados visibles:**
+1. El sistema no entrega datos de detalle y no abre ninguna pantalla
+
+**Curso alternativo — el redondeo de los segundos llega a 60:**
+1. El sistema acarrea la unidad al minuto, y del minuto al grado si hace falta
+2. El sistema nunca entrega un valor con 60 segundos ni con 60 minutos
+
+### Contrato
+
+El módulo `Cities` define `CityDetailViewModel` en `CityPresentation/`: un struct inmutable construido desde una `City`, molde exacto de `CityCellViewModel` y `CityMapViewModel`. **Todos los strings que la pantalla muestra se arman acá**, incluido el identificador — `Text(id, format: .number)` en la vista lo renderizaría como `"707.860"`, y un id no es una cantidad. La vista no formatea nada.
+
+**El view model del mapa viaja adentro del detalle** (`map: CityMapViewModel`). Es deliberadamente lo contrario de lo que el MR #8 descartó para `CityCellViewModel`: ahí el rechazo fue porque la celda **nunca dibuja un mapa** y habría cargado tres campos muertos dentro de su `Equatable`. La pantalla de detalle sí lo dibuja, así que es reuso y no soldadura de dos pantallas en un tipo.
+
+**El nombre del país sale de un `Locale` inyectado por initializer**, con default `.current`. `Locale` es un value type de Foundation sin I/O — la misma categoría que `Data` o `URL`, que el dominio ya usa —, así que no aplica la regla de "framework detrás de un protocolo" que sí gobierna a MapKit, SwiftData y URLSession. Es el mismo patrón que `pageSize`: el test fija el valor para ser determinista, el Composition Root se queda con el default. Un protocolo `CountryNameResolver` con su implementación y su doble sería envolver una función pura en tres tipos.
+
+Quién resuelve la selección: `CityListViewModel.detailViewModel(for cityID:)`, query pura sobre la ventana visible, molde literal de `mapViewModel(for:)`. Es lo que permite que `CitiesiOS` siga sin instanciar **ningún** tipo de `Cities`: la vista manda un `Int` y recibe un view model armado.
+
+No hace falta ningún protocolo nuevo: el detalle no carga datos, deriva de los que el catálogo ya tiene en memoria.
+
+**Cómo se presenta:** un `.sheet` colgado de `CityCatalogView`, la vista estable, **fuera del condicional de layout** — igual que la ciudad seleccionada. Es un solo camino para las dos orientaciones, lo cual importa porque en landscape **no hay `NavigationStack`** (la lista vive en un `HStack`), así que un `navigationDestination` directamente no existe de ese lado.
 
 ### Checklist
 
-- [ ] Tocar el botón de información abre el detalle de la ciudad correcta
-- [ ] El detalle muestra datos adicionales a los de la celda de lista
-- [ ] Snapshot del detalle en al menos un estado
+- [x] El detalle arma el título combinando nombre y código de país
+- [x] El detalle traduce el código de país a su nombre completo según el locale
+- [x] Un código de país desconocido se muestra tal cual, sin nombre inventado
+- [x] El detalle expresa la latitud en grados, minutos y segundos, con hemisferio N o S
+- [x] El detalle expresa la longitud en grados, minutos y segundos, con hemisferio E u O
+- [x] La latitud cero cae en el hemisferio norte y la longitud cero en el este — convención fijada, no accidente
+- [x] Los segundos que redondean a 60 acarrean al minuto, y los minutos a 60 acarrean al grado
+- [x] El identificador se entrega como texto, sin separador de miles
+- [x] El detalle publica el estado de favorito de la ciudad
+- [x] El detalle lleva los datos de mapa de esa misma ciudad
+- [x] Pedir el detalle de una ciudad visible entrega sus datos
+- [x] Pedir el detalle de una ciudad marcada como favorita la entrega como favorita
+- [x] Pedir el detalle de una ciudad fuera de la ventana visible no entrega nada
+- [x] Pedir el detalle antes de que el catálogo cargue no entrega nada
+- [x] Tocar el botón de información abre el detalle de la ciudad correcta
+- [x] Tocar el botón de información no navega al mapa — el detalle trae un botón "Cerrar" que la pantalla de mapa no tiene, así que la misma aserción distingue las dos
+- [x] El detalle muestra el nombre del país, las coordenadas en grados/minutos/segundos y el identificador — datos que la celda de la lista no tiene
+- [x] Cerrar el detalle vuelve a la lista
+- [x] El detalle se abre igual en portrait y en landscape
+- [x] Verificación contra el gist real: el detalle de Hurzuf muestra `44°33'00" N`, `34°17'00" E` e `Identificador 707860`, con el país resuelto por `Locale.current`
+
+> **Por qué no hay ítem de snapshot.** La primera redacción de este checklist pedía *"snapshot del detalle en al menos un estado"*. La pantalla lleva un mapa embebido, y los tiles de MapKit llegan por red y de forma asíncrona: un snapshot de esa pantalla sería **inestable por construcción**. Es el mismo argumento con el que el MR #8 justificó que sus dos snapshots salieran con el panel de mapa *sin* selección. Se reemplaza por cobertura de test de UI, que verifica lo mismo sin depender de la red.
 
 ---
 
