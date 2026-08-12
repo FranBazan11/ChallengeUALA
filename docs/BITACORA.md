@@ -6,6 +6,36 @@ Registro de cada MR cerrado, entradas más nuevas arriba. El objetivo es que qui
 
 ---
 
+## 2026-08-12 — Corrección: `publishVisibleResults()` materializaba la ventana entera en cada publish
+
+**Qué se rompió y cuándo.** El MR #8 (`docs/BITACORA.md:16-19`, más abajo) movió el cruce entre resultados y favoritos del lado de la vista al ViewModel: `State` pasó de publicar `CitySearchResults` a publicar `[CityCellViewModel]`, construido con `results.limited(to: visibleCount).map { CityCellViewModel(...) }`. `limited(to:)` sigue siendo O(1) (prefix sobre `ArraySlice`), pero el `.map` que le sigue no: construye `visibleCount` structs con dos interpolaciones de `String` cada uno, en el `MainActor`, en cada publish. La ganancia arquitectónica de ese MR era real —`CitiesiOS` deja de instanciar tipos de `Cities`, que es la regla explícita de `CLAUDE.md`—, pero el costo asociado no se vio ni se midió.
+
+**Las dos afirmaciones que quedaron falsas.** `BITACORA.md:18` (entrada del MR #8) decía *"el costo hoy es una página de ~50 filas y no las 200.000 que motivaron el guard, porque el propio MR #6 ya capó la colección publicada a una página"* — falso apenas la ventana crece por scroll: no hay techo para `visibleCount`, y con scroll profundo (y filtro vacío) llega a las 200.000. Y `docs/USE-CASES.md:577` (contrato de la Historia 12) decía *"El array publicado tiene exactamente el tamaño de lo que la lista renderiza, así que el costo no cambia"* — el array tenía el tamaño de la **ventana**, no de lo que `List` dibuja (~10-15 filas). Las dos afirmaciones asumían que la ventana se queda chica; ninguna lo verificaba.
+
+**Consecuencia.** Scrollear todo el catálogo con el filtro vacío pasaba de lineal a cuadrático: cada `.onAppear` de la última fila republicaba la ventana entera, no una página. Se agravaba con el otro cambio de comportamiento del mismo MR #8 — `toggleFavorite` con el filtro apagado ahora republica (`BITACORA.md:18`, mismo párrafo) — porque cada tap de estrella scrolleado profundo pagaba el mismo costo cuadrático.
+
+**Fix.** `Cities/CityPresentation/CityCellViewModels.swift`, una `RandomAccessCollection` perezosa que envuelve `CitySearchResults` + el set de favoritos y arma cada `CityCellViewModel` recién cuando algo la indexa. `State.loaded` pasa a llevar `CityCellViewModels` en vez de `[CityCellViewModel]`; `publishVisibleResults()` deja de mapear. Ni `CityListView` ni los `expect` de test necesitaron cambios: los dos consumen la ventana por la interfaz de `Collection`, no por ser específicamente un `Array`.
+
+**Test primero, con aserción, no `measure`.** `CityListViewModelPublishingCostTests` mide `sut.search(prefix: "")` repetido (20 veces) sobre dos SUTs con el mismo catálogo de 200.000 ciudades — uno con `pageSize: 50`, otro con `pageSize: 200_000` — y assertea que la relación entre las dos duraciones no supera 20×. Es deliberadamente una relación medida en la misma corrida, no un número absoluto: así no importa la contención del `parallelizable: true` del test plan (W9 le hace exactamente este reproche a `CityCatalogPerformanceTests`, que solo imprime).
+
+- **Rojo, contra el código del MR #8, corrido por el usuario:** `XCTAssertLessThan failed: ("0.9543...") is not less than ("0.00524...")` — publicar la ventana de 200.000 tardó **3.642×** lo que tardó la de 50 (0,954 s vs. 0,000262 s, 20 repeticiones).
+- **Verde, con `CityCellViewModels`:** **1,15×** (0,0000161 s vs. 0,0000139 s) — dentro del umbral por casi dos órdenes de magnitud.
+- **Mutación:** se reintrodujo el `.map` eager (esta vez dentro del `init` de `CityCellViewModels`, para no tocar `CityListViewModel`) y el test volvió a rojo — **3.823×** (0,856 s vs. 0,000224 s) — antes de restaurar la versión perezosa.
+
+**Qué se descartó.**
+- **Volver a `List(results)` con la vista armando las celdas.** Reabre W5 (la vista instanciando tipos de `Cities`), que es justo lo que el MR #8 cerró.
+- **Capar `visibleCount` por arriba, con reciclado de páginas.** Ataca también S1 (el diff de SwiftUI contra la colección anterior, que sigue siendo O(ventana)), pero es una feature nueva —cambia qué ve el usuario al scrollear— y no una corrección de este bug puntual. Queda anotado como candidato si S1 se prioriza.
+- **Dejar el `.map` y corregir solo la redacción del contrato.** El costo cuadrático es real y alcanzable (scroll profundo + filtro vacío es un camino normal, no un edge case); no alcanza con documentarlo.
+- **Memoizar el array y parchear solo la celda que cambia en `toggleFavorite`.** No resuelve el caso peor, que es el crecimiento de la ventana por scroll, no por toggle.
+
+**Documentación.** El párrafo del contrato en `docs/USE-CASES.md` (Historia 12) se reescribió para explicar la colección perezosa y decir explícitamente qué no resuelve. Se agregó el ítem de checklist *"Publicar la ventana no depende de su tamaño: 200.000 filas cuestan lo mismo que 50"*, tildado. `merge-review.md` se depuró de los hallazgos con cierre documentado (C1, C2, W1-W6, W8, W14); quedan W7, W9-W13 y las 24 Suggestions, con S1 anotado explicando qué delimitó esta corrección y qué le sigue faltando.
+
+**Qué sigue abierto.** S1 — el diff de SwiftUI contra la ventana publicada anterior, proporcional a su tamaño — no es lo que este fix ataca, y sigue sin test ni resolución. Candidato natural si el scroll profundo (40+ páginas) se vuelve un caso a optimizar.
+
+Suite: 122 tests en `CitiesTests` (antes 121), 150 en `CI_iOS` (antes 149), verdes en macOS y en el simulador de iPhone 17 Pro. Los dos snapshots de `CitiesiOSTests` (portrait y landscape) pasaron sin regrabar.
+
+---
+
 ## 2026-08-11 — MR #8: Mapa, layout adaptativo, y tests de UI que sí pueden fallar
 
 **Qué se construyó.** Las Historias 6 (mapa) y 8 (layout adaptativo), con su sección Contrato escrita antes del código. `CityMapViewModel` (`Cities/CityPresentation/`), struct inmutable construido desde una `City`, molde exacto de `CityCellViewModel`; `CityMapView` y `CityCatalogView` (`CitiesiOS/`), este último la vista pública nueva que reemplaza a `CityListView` como raíz; `CityListView` pasó a `internal` y a ser tonta; `LocalCityCatalogLoader` (`Cities/CityFeature/`) y `AppConfiguration` (`ChallengeUALA/`), que juntos le permiten al Composition Root recibir el catálogo por el entorno de arranque; y la infraestructura de snapshot testing propia en `CitiesiOSTests`, que los MRs #4 y #5 habían diferido dos veces. De paso se cierran tres hallazgos abiertos de la revisión independiente: **W4**, **W5** y **W14**. 121 tests en `CitiesTests` (antes 103) y 149 en `CI_iOS` (antes 112), verdes en macOS y en el simulador de iPhone 17 Pro, en Debug y en Release.
