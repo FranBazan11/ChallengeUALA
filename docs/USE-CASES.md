@@ -574,7 +574,9 @@ No es el algoritmo de búsqueda: medido sobre 200.000 ciudades, tipear seis cara
 
 La paginación es una decisión de presentación, no de dominio: `CityCatalog` sigue devolviendo el rango completo de coincidencias, y `CitySearchResults` solo suma la operación de acotarlo (`limited(to:)`), que se resuelve sobre el slice existente sin copiar entradas. `CityListViewModel` guarda el resultado completo puertas adentro y publica la ventana; la vista no decide cuándo pedir más, solo avisa qué fila apareció.
 
-Lo que se publica es la ventana ya convertida en view models de celda, no el modelo de dominio *(desde el MR #8)*. El array publicado tiene exactamente el tamaño de lo que la lista renderiza, así que el costo no cambia; lo que cambia es dónde vive el cruce entre resultados y favoritos — pasa al lado testeado, y la vista deja de instanciar tipos de `Cities`. Consecuencia directa: como el ícono de favorito viaja adentro de la celda publicada, marcar un favorito con el filtro apagado **sí** vuelve a entregar la página. Lo que se sigue evitando, que es lo que importaba, es volver a consultar el catálogo.
+Lo que se publica es la ventana ya convertida en view models de celda, no el modelo de dominio *(desde el MR #8)*. Ese cruce entre resultados y favoritos pasa al lado testeado, y la vista deja de instanciar tipos de `Cities`. Consecuencia directa: como el ícono de favorito viaja adentro de la celda publicada, marcar un favorito con el filtro apagado **sí** vuelve a entregar la página. Lo que se sigue evitando, que es lo que importaba, es volver a consultar el catálogo.
+
+Publicar la ventana no puede depender de su tamaño *(desde la corrección post-MR #8)*: lo que se guarda en `state` es una colección perezosa (`CityCellViewModels`) que envuelve `matchingResults.limited(to: visibleCount)` y arma cada `CityCellViewModel` recién cuando algo la indexa, no un `[CityCellViewModel]` construido con `.map` de antemano. Publicar cuesta O(1) sin importar si la ventana tiene 50 o 200.000 entradas. Lo que esto **no** resuelve: SwiftUI sigue diffeando la `List` contra la colección publicada anterior, y ese diff sí es proporcional al tamaño de la ventana — con scroll muy profundo y filtro vacío, ese costo queda abierto (ver Suggestion S1 de la revisión independiente).
 
 **Por qué paginar y no debouncear.** Un debounce no elimina el trabajo, lo demora: la primera tecla seguiría pagando el diff de 200.000, solo que más tarde, y encima incumpliría *"la lista debe actualizarse con cada carácter"*. Paginar acota el costo de **toda** transición al tamaño de una página.
 
@@ -594,3 +596,4 @@ Lo que se publica es la ventana ya convertida en view models de celda, no el mod
 - [x] `limited(to:)` con un tope negativo entrega una lista vacía, no un crash
 - [x] Un tamaño de página no positivo entrega igual una primera página y puede seguir creciendo
 - [x] Verificación en la app real contra el gist: primera tecla, borrado hasta vacío, toggle sin prefijo y scroll hasta el fondo, sin trabas
+- [x] Publicar la ventana no depende de su tamaño: 200.000 filas cuestan lo mismo que 50
