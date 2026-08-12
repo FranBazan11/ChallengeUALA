@@ -3,6 +3,8 @@
 *Juan Francisco Bazan Carrizo — 11 de agosto de 2026*
 
 > Documento vivo. Describe **solo lo que está implementado** en el código a la fecha. Está pensado para migrarse (total o parcialmente) al [README](../README.md) en el MR final, y para servir de base al pasar los diagramas a draw.io.
+>
+> **Última actualización:** 12 de agosto de 2026 — refleja el código hasta el MR #9.
 
 ## Índice
 
@@ -20,7 +22,7 @@
 
 ## Contexto y objetivo
 
-App iOS (SwiftUI + MapKit + SwiftData) que descarga un catálogo de ~200.000 ciudades, permite **filtrarlas por prefijo con cada tecla**, **marcarlas como favoritas**, y **verlas en un mapa** con un layout que cambia según la orientación del dispositivo.
+App iOS (SwiftUI + MapKit + SwiftData) que descarga un catálogo de ~200.000 ciudades, permite **filtrarlas por prefijo con cada tecla**, **marcarlas como favoritas**, **verlas en un mapa** con un layout que cambia según la orientación del dispositivo, y **abrir una ficha de información** de cada una.
 
 La restricción dominante del enunciado es de performance de búsqueda: *"optimizar para búsquedas rápidas; el tiempo de carga de la app no es tan importante"*. Toda la arquitectura del motor de búsqueda sale de ahí — ver [Decisiones de diseño](#decisiones-de-diseño-vigentes).
 
@@ -47,12 +49,14 @@ flowchart TD
         CCV["CityCatalogView"]
         CLV["CityListView"]
         CMV["CityMapView"]
+        CDV["CityDetailView"]
     end
 
     subgraph pres ["Cities / CityPresentation"]
         VM["CityListViewModel"]
-        CELL["CityCellViewModel"]
+        CELLS["CityCellViewModels<br/>(colección perezosa)"]
         MAPVM["CityMapViewModel"]
+        DETVM["CityDetailViewModel"]
     end
 
     subgraph domain ["Cities / CityFeature + CitySearch — Dominio"]
@@ -75,12 +79,17 @@ flowchart TD
     CFG --> CR
     CCV --> CLV
     CCV --> CMV
+    CCV -->|sheet| CDV
+    CDV --> CMV
     CLV -->|observa| VM
     CMV -->|lee| MAPVM
+    CDV -->|lee| DETVM
     VM -->|depende de contratos| LOADER
     VM -->|depende de contratos| STORE
-    VM -->|produce| CELL
+    VM -->|publica| CELLS
     VM -->|produce| MAPVM
+    VM -->|produce| DETVM
+    DETVM --> MAPVM
     LOADER -.implementado por.-> REMOTE
     LOADER -.implementado por.-> LOCAL
     STORE -.implementado por.-> SD
@@ -126,9 +135,9 @@ Dentro de `Cities`, los archivos se agrupan por boundary — y `CitiesTests` esp
 | `CityAPIInfrastructure/` | `URLSessionHTTPClient` | URLSession |
 | `CityFavorites/` | `FavoritesStore`, `InMemoryFavoritesStore` | — |
 | `CityFavoritesInfrastructure/` | `FavoriteCity`, `SwiftDataFavoritesStore` | SwiftData |
-| `CityPresentation/` | `CityListViewModel`, `CityCellViewModel`, `CityMapViewModel` | — |
+| `CityPresentation/` | `CityListViewModel`, `CityCellViewModel`, `CityCellViewModels`, `CityMapViewModel`, `CityDetailViewModel` | — |
 
-`CitiesiOS` encapsula SwiftUI y MapKit; `CityMapView` es el único archivo del proyecto que importa `MapKit`.
+`CitiesiOS` encapsula SwiftUI y MapKit; `CityMapView` es el único archivo del proyecto que importa `MapKit` — `CityDetailView` embebe la vista de mapa, pero no importa el framework.
 
 ---
 
@@ -241,16 +250,30 @@ classDiagram
         +State state
         +String searchPrefix
         +Bool showsFavoritesOnly
+        +CityMapViewModel? selectedMapViewModel
         -CityCatalog catalog
         -CitySearchResults matchingResults
         -Int visibleCount
         -Set~Int~ favoriteIDs
+        -City? selectedCity
+        -Locale locale
         +load() async
         +search(prefix)
         +setFavoritesOnly(Bool)
         +toggleFavorite(cityID)
         +showMoreResults(after cityID)
-        +mapViewModel(for cityID) CityMapViewModel?
+        +isFavorite(cityID) Bool
+        +selectCity(withID Int?)
+        +detailViewModel(for cityID) CityDetailViewModel?
+        -visibleCity(withID cityID) City?
+    }
+
+    class CityCellViewModels {
+        <<struct>>
+        RandomAccessCollection~CityCellViewModel~
+        -CitySearchResults results
+        -Set~Int~ favoriteIDs
+        -Int? selectedCityID
     }
 
     class CityCellViewModel {
@@ -259,6 +282,7 @@ classDiagram
         +String title
         +String subtitle
         +Bool isFavorite
+        +Bool isSelected
     }
 
     class CityMapViewModel {
@@ -268,6 +292,19 @@ classDiagram
         +Double latitude
         +Double longitude
         +Double spanInMeters
+    }
+
+    class CityDetailViewModel {
+        <<struct>>
+        +Int id
+        +String title
+        +String countryName
+        +String latitudeText
+        +String longitudeText
+        +String identifierText
+        +Bool isFavorite
+        +CityMapViewModel map
+        -sexagesimalText(coordinate, hemispheres)$
     }
 
     CityCatalogLoader <|.. RemoteCityCatalogLoader
@@ -290,11 +327,19 @@ classDiagram
     CityListViewModel --> CityCatalogLoader
     CityListViewModel --> FavoritesStore
     CityListViewModel --> CityCatalog
-    CityListViewModel ..> CityCellViewModel : produce
+    CityListViewModel ..> CityCellViewModels : publica en state
     CityListViewModel ..> CityMapViewModel : produce
+    CityListViewModel ..> CityDetailViewModel : produce
+    CityListViewModel o-- City : selectedCity
+    CityCellViewModels --> CitySearchResults
+    CityCellViewModels ..> CityCellViewModel : arma al indexar
+    CityDetailViewModel *-- CityMapViewModel
     CityCellViewModel ..> City
     CityMapViewModel ..> City
+    CityDetailViewModel ..> City
 ```
+
+Lo que no se ve en las cajas y define el diseño de esta capa: **`CityListViewModel` no devuelve ningún tipo de dominio hacia afuera**. `CitiesiOS` manda un `Int` y recibe un view model ya armado, así que la capa de vistas nunca instancia un tipo de `Cities`. Y desde el MR #9, `state` no guarda un `[CityCellViewModel]` sino la colección perezosa `CityCellViewModels` — el detalle está en el [flujo de búsqueda](#2-búsqueda-por-prefijo--el-camino-caliente).
 
 ### Capa de vistas
 
@@ -325,15 +370,17 @@ classDiagram
     class CityCatalogView {
         <<View, public>>
         +CityListViewModel viewModel
-        -CityMapViewModel? selectedCity
+        -CityDetailViewModel? detailCity
         -Int reloadToken
         -verticalSizeClass
+        -selectedCity Binding~CityMapViewModel?~
     }
 
     class CityListView {
         <<View, internal>>
         +CityListViewModel viewModel
         +onSelect (Int) Void
+        +onShowDetail (Int) Void
         +onRetry () Void
         -isFilterFocused
     }
@@ -342,12 +389,28 @@ classDiagram
         <<View, internal>>
         +CityCellViewModel viewModel
         +onToggleFavorite () Void
+        +onShowDetail () Void
     }
 
     class CityMapView {
         <<View, internal>>
         +CityMapViewModel? viewModel
         -MapCameraPosition position
+    }
+
+    class CityDetailView {
+        <<View, internal>>
+        +CityDetailViewModel viewModel
+        +onToggleFavorite () Void
+        +onClose () Void
+        -verticalSizeClass
+        -mapHeight CGFloat
+    }
+
+    class DetailRow {
+        <<View, private>>
+        +String label
+        +String value
     }
 
     class CityListViewModel {
@@ -360,10 +423,15 @@ classDiagram
     CompositionRoot ..> CityListViewModel : construye e inyecta
     CityCatalogView *-- CityListView
     CityCatalogView *-- CityMapView
+    CityCatalogView *-- CityDetailView : sheet
+    CityDetailView *-- CityMapView : embebido
+    CityDetailView *-- DetailRow
     CityListView *-- CityCellView
     CityListView --> CityListViewModel : observa
     CityCatalogView --> CityListViewModel
 ```
+
+`CityCatalogView` conserva un solo `@State` propio —`detailCity`, el sheet abierto— más el `reloadToken`. La ciudad seleccionada **dejó de ser estado de la vista en el MR #9**: hoy vive en el view model y la vista solo arma un `Binding` contra él, el mismo patrón que ya usaban `searchPrefix` y `showsFavoritesOnly`.
 
 ---
 
@@ -447,7 +515,7 @@ sequenceDiagram
     alt éxito
         VM->>VM: catalog = resultado
         VM->>VM: refreshResults()
-        VM-->>V: state = .loaded([CityCellViewModel])
+        VM-->>V: state = .loaded(CityCellViewModels)
     else .connectivity / .invalidData
         VM-->>V: state = .failed(message)
     else .cancelled
@@ -470,6 +538,7 @@ sequenceDiagram
     participant CAT as CityCatalog
     participant IDX as searchIndex<br/>[CitySearchEntry] ordenado
     participant R as CitySearchResults
+    participant CELLS as CityCellViewModels
 
     U->>TF: teclea un carácter
     TF->>VM: search(prefix:)
@@ -494,20 +563,29 @@ sequenceDiagram
     end
 
     VM->>R: limited(to: visibleCount)
-    R-->>VM: primeras 50 City
-    VM->>VM: map a [CityCellViewModel]
-    VM-->>TF: state = .loaded(cells)
+    R-->>VM: slice acotada, sin copiar
+    VM->>CELLS: envuelve slice + favoriteIDs + selectedCityID
+    Note over CELLS: no se arma ninguna celda todavía
+    VM-->>TF: state = .loaded(CityCellViewModels)
+
+    TF->>CELLS: subscript(position) al pintar una fila
+    CELLS-->>TF: CityCellViewModel recién ahí
 ```
 
-Tres propiedades que hacen que esto sea barato:
+Cuatro propiedades hacen que esto sea barato:
 
 | Paso | Costo | Por qué |
 |---|---|---|
 | Ubicar el rango | **O(log n)** — ~18 comparaciones | Binary search sobre array ordenado, no scan lineal |
 | Construir el resultado | **O(1)** | `CitySearchResults` envuelve un `ArraySlice`; no copia ni reordena nada |
-| Materializar celdas | **O(pageSize)** = 50 | `limited(to:)` corta antes de mapear |
+| Acotar a la ventana | **O(1)** | `limited(to:)` mueve el borde del slice, no copia entradas |
+| Publicar el estado | **O(1)** | `CityCellViewModels` guarda la slice más dos colecciones; cada `CityCellViewModel` se arma recién cuando SwiftUI indexa para pintar esa fila |
 
 El orden alfabético sale gratis: el índice ya está ordenado, así que la slice sale ordenada por ciudad y después por país sin reordenar en cada tecleo.
+
+**El último paso cambió en el MR #9 y es el que más importa.** Hasta entonces `publishVisibleResults()` hacía un `.map` sobre la ventana y guardaba un `[CityCellViewModel]` en `state`: publicar costaba O(pageSize), lo cual está bien con 50 pero no con la ventana ya crecida por scroll. Hoy `state` guarda una colección perezosa y publicar cuesta lo mismo con 50 que con 200.000 entradas. Tiene test propio —`CityListViewModelPublishingCostTests`— que compara las dos ventanas y falla si el costo escala.
+
+> **Lo que esto no resuelve, y está declarado.** SwiftUI sigue diffeando la `List` contra la colección publicada anterior, y **ese** diff sí es proporcional al tamaño de la ventana. Con scroll muy profundo y filtro vacío ese costo queda abierto — ver [Observaciones y deuda técnica](#observaciones-y-deuda-técnica) y la Historia 12 de [USE-CASES.md](USE-CASES.md).
 
 ### 3. Marcar y desmarcar un favorito
 
@@ -567,13 +645,20 @@ Las tres guardas son un `guard` único en el ViewModel. La lista nunca materiali
 
 ### 5. Selección de ciudad y layout adaptativo
 
+Una celda tiene **dos acciones distintas**: tocar la fila la selecciona para el mapa, tocar la ⓘ abre su ficha. Este flujo cubre la primera; el detalle está en el [flujo 6](#6-pantalla-de-detalle).
+
 ```mermaid
 flowchart TD
-    TAP["Tap en una celda"] --> SEL["onSelect(cityID)"]
-    SEL --> MVM["viewModel.mapViewModel(for: cityID)"]
-    MVM --> STATE["@State selectedCity: CityMapViewModel?"]
+    TAP["Tap en la fila"] --> SEL["onSelect(cityID)"]
+    SEL --> CMD["viewModel.selectCity(withID:)"]
+    CMD --> STORE["selectedCity: City?<br/>guarda la ciudad, no el id"]
+    STORE --> PUB["publishVisibleResults()"]
 
-    STATE --> ORI{"verticalSizeClass"}
+    PUB --> ROW["La celda se republica<br/>con isSelected = true"]
+    ROW --> HL[".listRowBackground gris<br/>+ trait .isSelected"]
+
+    STORE --> QUERY["viewModel.selectedMapViewModel"]
+    QUERY --> ORI{"verticalSizeClass"}
 
     ORI -->|".compact — landscape"| HS["HStack<br/>lista · divider · mapa"]
     ORI -->|"regular — portrait"| NS["NavigationStack<br/>+ navigationDestination(item:)"]
@@ -589,10 +674,57 @@ flowchart TD
 Detalles que sostienen este flujo:
 
 - **`verticalSizeClass`, no `horizontalSizeClass`.** En iPhone el horizontal es `.compact` en las dos orientaciones; el vertical es el que efectivamente distingue portrait de landscape.
-- **El estado de selección es un `CityMapViewModel`, no un `City`.** La vista de mapa recibe un modelo de presentación ya formateado (título armado, span decidido) y no toca el dominio.
+- **La selección vive en el view model, no en la vista** *(cambió en el MR #9)*. Mientras el único consumidor era el panel del mapa, un `@State` en `CityCatalogView` alcanzaba. En cuanto **la fila también tiene que saberse seleccionada**, dejarla en la vista obliga a que la celda compare ids por su cuenta y reaparece el patrón de dos lugares que saben lo mismo. Hoy es un comando (`selectCity(withID:)`) más dos queries (`selectedMapViewModel`, y el `isSelected` que viaja en la celda), con CQS intacto: el comando no devuelve nada, la query no tiene efectos.
+- **`selectedCity` guarda la `City` entera, no su id, y eso es comportamiento.** Si guardara el id y resolviera la ciudad contra los resultados vigentes, **tipear un filtro que excluya a la ciudad seleccionada borraría el mapa mientras el usuario escribe**. Guardando la `City`, el mapa sobrevive al filtro; lo único que desaparece es el destaque de la fila —correcto, porque esa fila no está en pantalla— y vuelve si el filtro se afloja.
+- **El destaque se expone además como trait de accesibilidad (`.isSelected`).** Un color de fondo no se puede consultar desde XCUITest; un trait sí, y de paso VoiceOver anuncia la fila como seleccionada.
 - **`CityMapViewModel` no importa MapKit.** `CLLocationCoordinate2D` y `MKCoordinateRegion` se construyen dentro de `CityMapView` — MapKit no cruza el borde hacia `Cities`.
+- **`navigationTitle` no vive en `CityMapView`** *(cambió en el MR #9)*: lo pone el `navigationDestination` que la usa. La vista del mapa se embebe también dentro del detalle, que tiene su **propio** `NavigationStack`, y `navigationTitle` se propaga hacia arriba como preferencia — el título del mapa habría pisado el del detalle. De paso, la vista deja de asumir que está dentro de un stack de navegación, que en landscape es falso.
 
-### 6. Estados del ViewModel
+### 6. Pantalla de detalle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Usuario
+    participant CELL as CityCellView
+    participant CV as CityCatalogView
+    participant VM as CityListViewModel
+    participant DV as CityDetailView
+
+    U->>CELL: toca el botón ⓘ
+    CELL->>CV: onShowDetail(cityID)
+    CV->>+VM: detailViewModel(for: cityID)
+    VM->>VM: visibleCity(withID:) sobre la ventana visible
+
+    alt la ciudad no está en la ventana visible
+        VM-->>CV: nil — no se abre nada
+    else la ciudad está visible
+        VM->>VM: nombre del país vía Locale inyectada
+        VM->>VM: coordenadas a grados/minutos/segundos
+        VM->>VM: id como texto, sin separador de miles
+        VM-->>-CV: CityDetailViewModel (con su map adentro)
+        CV->>CV: detailCity = resultado
+        CV->>DV: .sheet(item:)
+        DV->>DV: NavigationStack + CityMapView embebido
+    end
+
+    U->>DV: toca la estrella del detalle
+    DV->>VM: toggleFavorite(cityID:)
+    DV->>VM: detailViewModel(for: cityID)
+    VM-->>DV: view model nuevo, isFavorite invertido
+    Note over DV: el struct es inmutable —<br/>no se muta, se vuelve a derivar
+
+    U->>DV: toca "Cerrar"
+    DV->>CV: detailCity = nil
+```
+
+Tres cosas que este flujo hace explícitas:
+
+- **El sheet cuelga de `CityCatalogView`, fuera del condicional de layout.** No es preferencia estética: en landscape la lista vive en un `HStack` **sin `NavigationStack`**, así que un `navigationDestination` directamente no existe de ese lado. El sheet es un solo camino para las dos orientaciones y, colgado de la vista estable, sobrevive a la rotación.
+- **El detalle no muta: se vuelve a derivar.** `CityDetailViewModel` es un struct inmutable, así que marcar un favorito desde adentro del sheet pide un view model nuevo al `CityListViewModel`. Es la misma disciplina de value types que el resto del proyecto, aplicada a la pantalla modal.
+- **La vista no formatea nada.** El título, el nombre del país, las coordenadas en DMS y el identificador se arman todos en el view model. `Text(id, format: .number)` habría renderizado `"707.860"` — y un id no es una cantidad.
+
+### 7. Estados del ViewModel
 
 ```mermaid
 stateDiagram-v2
@@ -605,11 +737,13 @@ stateDiagram-v2
     loaded --> loaded : setFavoritesOnly(_:)
     loaded --> loaded : toggleFavorite(cityID:)
     loaded --> loaded : showMoreResults(after:)
+    loaded --> loaded : selectCity(withID:)
 
     failed --> loading : Reintentar — reloadToken += 1
 
     note right of loaded
-        .loaded([CityCellViewModel])
+        .loaded(CityCellViewModels)
+        Colección perezosa, no un array.
         Lista vacía es un estado válido:
         "No encontramos ciudades para ese filtro"
     end note
@@ -646,9 +780,29 @@ El catálogo es inmutable y se descarga entero. Persistirlo agregaría un ciclo 
 
 Es un `RandomAccessCollection` que envuelve un `ArraySlice<CitySearchEntry>` más el array de ciudades. Ni `search(prefix:)`, ni `limited(to:)`, ni `filter(byFavoriteIDs:)` copian ciudades: solo mueven los bordes de la slice. La `City` concreta se resuelve recién en el `subscript`, al pintar una celda.
 
+### Publicar la ventana visible cuesta O(1)
+
+`state` no guarda un `[CityCellViewModel]` construido con `.map`, sino `CityCellViewModels`: otra colección perezosa, que envuelve la ventana acotada más el set de favoritos y el id seleccionado, y arma cada celda recién cuando algo la indexa. Publicar cuesta lo mismo con 50 entradas que con 200.000.
+
+La alternativa —mapear de antemano— funcionaba mientras la ventana era de 50, pero el costo crece con el scroll, y se paga en el main thread en cada tecla. Está cubierto por `CityListViewModelPublishingCostTests`, que compara el costo de publicar las dos ventanas y falla si escala.
+
+### La selección vive en el view model y guarda la `City`
+
+Ver el [flujo 5](#5-selección-de-ciudad-y-layout-adaptativo). Dos consecuencias que no son obvias: la fila destacada y el mapa leen la **misma** fuente en vez de comparar ids cada una por su lado, y el mapa **sobrevive a un filtro que excluya a la ciudad seleccionada** porque lo guardado es la ciudad, no una referencia a resolver contra los resultados vigentes.
+
+### `CityMapViewModel` viaja dentro del detalle, pero se rechazó dentro de la celda
+
+Parecen decisiones contradictorias y no lo son. `CityCellViewModel` **no** lo lleva porque la celda nunca dibuja un mapa: serían tres campos muertos cargando su `Equatable`, que se compara en cada republicación de la lista. `CityDetailViewModel` **sí** lo lleva porque la ficha efectivamente embebe un mapa. El criterio es si el consumidor usa el dato, no si el dato "va junto".
+
+### `Locale` inyectado por initializer, sin protocolo de por medio
+
+El nombre completo del país sale de `locale.localizedString(forRegionCode:)`, con `Locale` inyectada y default `.current`. Es un value type de Foundation sin I/O — la misma categoría que `Data` o `URL`, que el dominio ya usa —, así que no le aplica la regla de "framework detrás de un protocolo" que sí gobierna a MapKit, SwiftData y URLSession. Mismo patrón que `pageSize`: el test fija el valor para ser determinista, el Composition Root se queda con el default.
+
+Se descartó un `CountryNameResolver`: protocolo + implementación + doble de test para envolver una función pura.
+
 ### Value types por defecto
 
-`City`, `CityCatalog`, `CitySearchResults`, `CityCellViewModel`, `CityMapViewModel`, ambos loaders y el `URLSessionHTTPClient` son `struct`. Las únicas `class` del proyecto son las que necesitan identidad y estado mutable: el `CityListViewModel` (`@Observable`) y los dos `FavoritesStore`.
+`City`, `CityCatalog`, `CitySearchResults`, `CityCellViewModel`, `CityCellViewModels`, `CityMapViewModel`, `CityDetailViewModel`, ambos loaders y el `URLSessionHTTPClient` son `struct`. Las únicas `class` del proyecto son las que necesitan identidad y estado mutable: el `CityListViewModel` (`@Observable`) y los dos `FavoritesStore`.
 
 ### Errores tipados en el borde del dominio
 
@@ -662,9 +816,12 @@ Es un `RandomAccessCollection` que envuelve un `ArraySlice<CitySearchEntry>` má
 |---|---|---|
 | 1 | `LocalCityCatalogLoader` vive en `CityFeature/` pero usa `CityCatalogMapper`, que vive en `CityAPI/`. Compila porque es el mismo target, pero es un cruce de boundary contra la dirección de las carpetas. Correspondería mover el loader a `CityAPI/`, o extraer el mapper a un boundary propio de decodificación. | Organizacional, no funcional |
 | 2 | `CityCatalog` es el tipo de retorno de `CityCatalogLoader` (`CityFeature/`) pero está definido en `CitySearch/`. Es una dependencia legítima del dominio hacia el dominio, pero vale tenerla explícita al leer los diagramas. | Ninguno |
-| 3 | Historia 7 (pantalla de información de la ciudad) está redactada en [USE-CASES.md](USE-CASES.md) pero no implementada. | Funcionalidad `could-have` pendiente |
+| 3 | Publicar la ventana es O(1), pero **SwiftUI sigue diffeando la `List` contra la colección publicada anterior**, y ese diff sí escala con el tamaño de la ventana. Con scroll muy profundo y filtro vacío el costo queda abierto. | Acotado, no eliminado. Registrado en la Historia 12 |
 | 4 | Historia 11 (catálogo con fallback offline) está redactada y explícitamente diferida. | Diferida por decisión de scope |
 | 5 | El catálogo se recarga entero en cada `load()`. Sin conexión y después de un reintento fallido, no hay snapshot previo para mostrar — es exactamente lo que resolvería la Historia 11. | Aceptado para esta entrega |
+| 6 | `CityListViewModel.isFavorite(_:)` es API pública **sin ningún llamador en producción**: desde que `isFavorite` viaja adentro de `CityCellViewModel`, la vista no necesita preguntar. Hoy la sostienen solo sus tests. Es la misma situación que el MR #9 resolvió borrando `mapViewModel(for:)`. | Superficie pública de más; candidata a borrarse |
+
+La Historia 7 (pantalla de información) figuraba acá como pendiente hasta el MR #9, que la cerró.
 
 ---
 
@@ -676,7 +833,8 @@ Es un `RandomAccessCollection` que envuelve un `ArraySlice<CitySearchEntry>` má
 | **Índice de búsqueda** | `[CitySearchEntry]` ordenado por `searchKey`, construido una vez al cargar |
 | **`searchKey`** | `"nombre, país"` en minúsculas, precalculado. Es contra esto que se compara el prefijo |
 | **`cityIndex`** | Posición de la `City` real en `CityCatalog.cities`. La entrada del índice no guarda la ciudad |
-| **Ventana visible** | Las primeras `visibleCount` ciudades del resultado actual — lo único que se materializa como celdas |
+| **Ventana visible** | Las primeras `visibleCount` ciudades del resultado actual — lo único que la lista puede llegar a pintar |
+| **Colección perezosa** | `CitySearchResults` y `CityCellViewModels`: envuelven una slice y arman el elemento en el `subscript`, no de antemano. Nada se materializa hasta que SwiftUI pinta la fila |
 | **Composition Root** | `CompositionRoot` en el app target: el único lugar que instancia dependencias concretas |
 | **Boundary** | Un límite arquitectónico marcado por un protocolo. En este repo, también una carpeta dentro de `Cities` |
 
