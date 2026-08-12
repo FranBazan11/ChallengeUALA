@@ -14,7 +14,7 @@ public final class CityListViewModel: Sendable {
     @frozen
     public enum State {
         case loading
-        case loaded([CityCellViewModel])
+        case loaded(CityCellViewModels)
         case failed(message: String)
     }
 
@@ -125,12 +125,6 @@ public final class CityListViewModel: Sendable {
 
     private func publishVisibleResults() {
         guard let matchingResults else { return }
-        state = .loaded(visibleCells(of: matchingResults))
-    }
-
-    private func visibleCells(of results: CitySearchResults) -> [CityCellViewModel] {
-        results.limited(to: visibleCount).map {
-            CityCellViewModel(city: $0, isFavorite: favoriteIDs.contains($0.id))
-        }
+        state = .loaded(CityCellViewModels(results: matchingResults.limited(to: visibleCount), favoriteIDs: favoriteIDs))
     }
 }
