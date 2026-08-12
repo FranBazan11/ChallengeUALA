@@ -2,6 +2,8 @@
 
 *Complementa a [REQUISITOS.md](REQUISITOS.md) y al PDF original ([Mobile Challenge - Engineer - v0.8.pdf](Mobile%20Challenge%20-%20Engineer%20-%20v0.8.pdf)) — el enunciado. Este doc es el plan de ataque: desafíos, metodología y las decisiones técnicas ya resueltas para arrancar.*
 
+> **Documento histórico: es el plan previo al código, no el estado final.** Se deja tal como se escribió, porque parte de su valor es mostrar qué se planificó y qué la implementación terminó desmintiendo. Dos decisiones de acá fueron revisadas por mediciones posteriores: la búsqueda en background con un `Task` por tecla (§1.2) se descartó —0,36 µs por búsqueda hacen que el scheduling cueste más que la búsqueda misma—, y la cota del prefix range terminó siendo `\u{10FFFF}` y no el `\u{FFFF}` de §3.5. Donde este doc y el [README](../README.md) difieran, manda el README.
+
 > **Revisión aplicada** (para que estos catches no se pierdan en el camino):
 > 1. La referencia al enunciado apuntaba a `Uala_Mobile_Challenge.md`, un archivo que no existe en este repo — corregida arriba.
 > 2. `FavoriteCity` (SwiftData) estaba expuesto sin protocolo — se agregó `FavoritesStore` en §4 para no acoplar el dominio a SwiftData.
@@ -235,11 +237,11 @@ var body: some View {
 
 ## 6. Checklist para el README
 
-Decisiones a documentar explícitamente (el enunciado las pide como "assumptions you made"):
+Decisiones a documentar explícitamente (el enunciado las pide como "assumptions you made"). Cerrada con la escritura del [README](../README.md) final:
 
-- [ ] Por qué el índice es un array ordenado + binary search, y no un trie
-- [ ] Por qué `searchKey` se precalcula una sola vez en vez de recalcular `.lowercased()` en cada comparación
-- [ ] Por qué el catálogo vive en memoria y no en SwiftData
+- [x] Por qué el índice es un array ordenado + binary search, y no un trie
+- [x] Por qué `searchKey` se precalcula una sola vez en vez de recalcular `.lowercased()` en cada comparación
+- [x] Por qué el catálogo vive en memoria y no en SwiftData
 - [x] Por qué SwiftData se usa solo para favoritos, y por qué está detrás de un protocolo `FavoritesStore`
-- [ ] Por qué `verticalSizeClass` y no `horizontalSizeClass` / `NavigationSplitView`
-- [ ] Cualquier assumption sobre el formato/encoding del JSON del gist (incluida la cota `\u{FFFF}` del prefix range)
+- [x] Por qué `verticalSizeClass` y no `horizontalSizeClass` / `NavigationSplitView`
+- [x] Cualquier assumption sobre el formato/encoding del JSON del gist (incluida la cota del prefix range, que terminó siendo `\u{10FFFF}` y no el `\u{FFFF}` de §3.5)

@@ -6,6 +6,46 @@ Registro de cada MR cerrado, entradas más nuevas arriba. El objetivo es que qui
 
 ---
 
+## 2026-08-12 — MR #10: El README de entrega
+
+**Qué se construyó.** El [README](../README.md) final, que hasta hoy seguía siendo el esqueleto del MR #1 con sus dos secciones centrales diciendo textualmente *"Pendiente — se completa en el MR #9"*. El MR #9 existió y cerró, pero fue la pantalla de detalle: esas secciones nunca se escribieron. No es un pendiente cosmético — el enunciado pone el README como criterio de evaluación explícito (*"proveer un README.md explicando tu enfoque para resolver el problema de búsqueda y cualquier otra decisión importante o supuesto"*), y toda esa información existía pero vivía repartida entre `BITACORA.md` (128 KB, cronológica) y `ARQUITECTURA.md`, que no es lo que un evaluador lee primero. Se cerró además la checklist §6 de `PLAN-TECNICO.md`, que era la que llevaba la cuenta de qué decisiones tenían que quedar documentadas.
+
+**La regla que ordena el documento: una sola sección profunda, el resto delega.** La de búsqueda es autosuficiente y se lee sin abrir ningún otro archivo, porque es lo que el enunciado evalúa; arquitectura, flujos y diagramas se nombran en dos o tres líneas y linkean a `ARQUITECTURA.md`. Sin esa regla el README se convierte en una copia de ese documento y los dos se desincronizan al primer cambio.
+
+**Decisiones.**
+- **Las capturas son los PNG de la suite de snapshots, referenciados donde ya viven** (`CitiesiOSTests/snapshots/`), no copias en un `docs/assets/`. Una copia se desincroniza en la primera regrabación; referenciarlos en su lugar habilita además un argumento que una captura suelta no tiene: **son imágenes que un test verifica en cada corrida**, así que no pueden quedar mostrando una UI que ya no existe sin poner la suite en rojo.
+- **El epígrafe de la captura de landscape dice que el panel del mapa está vacío a propósito.** Es el estado que el snapshot congela por la decisión del MR #8 —los tiles de MapKit llegan por red y harían el snapshot inestable—, y sin esa aclaración la imagen se lee como un mapa roto. Se prefirió explicar el vacío antes que esconderlo o reemplazar la captura por una sacada a mano.
+- **Los números de performance van con su modo de compilación al lado.** El repo tiene dos corridas legítimas y distintas: MR #2 midió en `-O` (`search` 0,36 µs, `buildIndex` 12,9 ms) y MR #6 en Debug (~0,06 ms por tecla, índice 195 ms). Sin el contexto parecen contradictorios. La tabla principal usa los de Release y lo dice; los de Debug aparecen solo en el párrafo del diff de la `List`, marcados como tales.
+- **El README documenta `\u{10FFFF}` y no `\u{FFFF}`.** `PLAN-TECNICO.md` §3.5 propone `\u{FFFF}` y el código usa `\u{10FFFF}` (`CityCatalog.swift:31`). El README describe lo que hace el código, y el plan técnico quedó con una nota de documento histórico que registra las dos decisiones suyas que las mediciones desmintieron — la otra es el `Task` por tecla de §1.2.
+- **Hay una sección "Qué quedó fuera, y por qué".** Cinco ítems —Historia 11, la fuente de datos adicional del detalle, el diff de la `List` con scroll profundo, el fetch sin índice de SwiftData al marcar favorito, y `isFavorite(_:)` sin llamador— cada uno con el argumento y el puntero a dónde está registrado. Una entrega que declara su deuda conocida es más creíble que una que la omite, y el enunciado pide "supuestos" explícitamente.
+- **La sección de estructura se reescribió, no se retocó.** La anterior describía `CityPresentation` como *"view models de la lista y de la celda"* —sin el de mapa ni el de detalle— y no mencionaba `LocalCityCatalogLoader`. Es el hallazgo S23 de `merge-review.md`, que queda cerrado con esto.
+
+**Qué se descartó.**
+- **Meter los diagramas de capas y flujos en el README.** Es la versión "el README se banca solo", y el costo es duplicar `ARQUITECTURA.md` entero: dos fuentes para la misma verdad, que divergen en el primer cambio de código.
+- **Sacar capturas nuevas del mapa y del detalle en el simulador.** Cubrirían lo que a los snapshots les falta, pero son archivos que ningún test verifica y que envejecen en silencio. Si más adelante se suman, van a `docs/assets/` sin tocar el resto.
+- **Poner conteos de tests en el README.** Envejecen mal y obligan a tocar el README en cada MR. La estrategia de testing se describe por lo que cubre cada target, no por un número; los números viven acá, con su fecha.
+
+**Verificación.** Los dos comandos del CI, corridos completos sobre este branch:
+
+```
+$ xcodebuild test -project ChallengeUALA.xcodeproj -scheme Cities \
+    -destination 'platform=macOS' -testPlan Cities
+** TEST SUCCEEDED **     148 tests, 0 failures
+
+$ xcodebuild test -project ChallengeUALA.xcodeproj -scheme CI_iOS \
+    -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -testPlan CI_iOS
+** TEST SUCCEEDED **     184 tests, 0 failures
+                         (CitiesTests 148 · CitiesiOSTests 6 · ChallengeUALATests 11 · ChallengeUALAUITests 19)
+```
+
+Además: se verificó que cada link relativo del README resuelve a un archivo existente en este branch, que cada número y cada afirmación tiene su fuente en esta bitácora, y que cada bullet de `REQUISITOS.md` tiene su renglón en la sección "Qué hace, punto por punto del enunciado".
+
+**Una corrección de conteo, que no es una regresión.** La entrada del MR #9 anota *"185 en `CI_iOS`"*; la corrida de hoy ejecuta **184**, y entre el merge del MR #9 (`a8ddd33`) y `HEAD` el único archivo que cambió es `docs/ARQUITECTURA.md` — o sea que no se borró ni se rompió ningún test: el 185 estaba mal contado. De paso quedó claro por qué el conteo estático engaña: `CompositionRootTests.testSpecificCityID()` y `SwiftDataFavoritesStoreTests.testSpecificStoreURL()` son helpers privados que empiezan con `test` y no son casos de test, así que grepear `func test` da 186 donde el runner ejecuta 184.
+
+**Qué sigue abierto.** Los hallazgos W7, W9–W13 y las 24 Suggestions de la revisión independiente siguen sin decidirse, y `merge-review.md` sigue sin borrarse — su checklist de cierre tiene esos dos ítems pendientes. Este MR cierra S23 y nada más de esa lista. Sigue siendo un archivo temporal sin trackear, que no entra en ningún commit.
+
+---
+
 ## 2026-08-12 — MR #9: Pantalla de información, y los dos ítems que el MR #8 dejó sin tildar
 
 **Qué se construyó.** La Historia 7 (pantalla de información), con su sección Contrato escrita antes del código; el cierre de los dos ítems que la Historia 6 dejó abiertos; y el destaque de la fila seleccionada, que es un agujero de UX que se detectó revisando el MR ya terminado. `CityDetailViewModel` (`Cities/CityPresentation/`), struct inmutable construido desde una `City`, molde exacto de `CityCellViewModel` y `CityMapViewModel`; `CityListViewModel.detailViewModel(for cityID:)`, query sobre la ventana visible; `CityDetailView` (`CitiesiOS/`), presentada como sheet desde `CityCatalogView`; un botón de información en cada celda, que es un requisito textual del enunciado (*"Contener un botón que, al tocarlo, abra una pantalla de información sobre la ciudad seleccionada"*); y la selección, que **se mudó de la vista al view model**. 148 tests en `CitiesTests` (antes 122) y 185 en `CI_iOS` (antes 150), verdes en macOS y en el simulador de iPhone 17 Pro, en Debug y en Release.
