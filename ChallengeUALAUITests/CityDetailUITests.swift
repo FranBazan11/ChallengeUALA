@@ -10,7 +10,10 @@ import XCTest
 final class CityDetailUITests: XCTestCase {
 
     override func tearDown() {
-        MainActor.assumeIsolated { XCUIDevice.shared.orientation = .portrait }
+        MainActor.assumeIsolated {
+            XCUIApplication().terminate()
+            XCUIDevice.shared.orientation = .portrait
+        }
         super.tearDown()
     }
 

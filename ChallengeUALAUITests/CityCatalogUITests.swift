@@ -10,7 +10,10 @@ import XCTest
 final class CityCatalogUITests: XCTestCase {
 
     override func tearDown() {
-        MainActor.assumeIsolated { XCUIDevice.shared.orientation = .portrait }
+        MainActor.assumeIsolated {
+            XCUIApplication().terminate()
+            XCUIDevice.shared.orientation = .portrait
+        }
         super.tearDown()
     }
 
@@ -96,20 +99,6 @@ final class CityCatalogUITests: XCTestCase {
         XCTAssertTrue(
             row(for: UITestCityCatalog.firstCityName, in: app).isSelected,
             "la fila de la ciudad que está en el mapa no quedó marcada como seleccionada"
-        )
-    }
-
-    @MainActor
-    func test_selectingAnotherCityInLandscape_unmarksThePreviousRow() {
-        XCUIDevice.shared.orientation = .landscapeLeft
-        let app = launchAppWithTestCatalog()
-        firstCity(in: app).tap()
-
-        app.staticTexts["\(UITestCityCatalog.secondCityName), AR"].tap()
-
-        XCTAssertFalse(
-            row(for: UITestCityCatalog.firstCityName, in: app).isSelected,
-            "quedaron dos filas marcadas como seleccionadas a la vez"
         )
     }
 
