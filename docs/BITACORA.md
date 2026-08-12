@@ -6,6 +6,27 @@ Registro de cada MR cerrado, entradas más nuevas arriba. El objetivo es que qui
 
 ---
 
+## 2026-08-12 — Corrección de configuración: Supported Destinations por target
+
+**Origen.** Revisión manual del General tab de cada target en Xcode. Todos los targets salvo `Cities`/`CitiesTests` tenían habilitados destinos de compatibilidad — Mac Catalyst, "Mac (Designed for iPhone)" y "Apple Vision (Designed for iPhone)" — que no correspondían a ningún requisito del enunciado ni a lo que ya documentaba `docs/ARQUITECTURA.md` (tabla "Módulos y targets": `ChallengeUALA` y `CitiesiOS` son iOS puro; solo `Cities` es multiplataforma, y a propósito, para correr el loop de TDD en macOS sin bootear el simulador).
+
+**Por qué estaban ahí.** Es el comportamiento por default de Xcode 26 al crear un target nuevo (`CreatedOnToolsVersion = 26.6` en los siete targets): habilita estos destinos de compatibilidad salvo que se los saque explícitamente. No fue una decisión tomada, era ruido de creación de target sin revisar.
+
+**Fix.** Se agregaron las claves `SUPPORTS_MACCATALYST`, `SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD` y `SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD` en `NO` donde faltaban, en Debug y Release:
+- `ChallengeUALA`: faltaba `SUPPORTS_MACCATALYST` (las otras dos ya estaban en `NO` de una edición manual previa sin commitear).
+- `ChallengeUALATests` y `ChallengeUALAUITests`: faltaban las tres.
+- `CitiesiOS` y `CitiesiOSTests`: faltaba `SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD` (las otras dos ya estaban).
+
+`Cities` y `CitiesTests` no se tocaron: su `SDKROOT = macosx` + `SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx"` es multiplataforma nativo, no un destino de compatibilidad, y coincide exactamente con lo documentado.
+
+**De paso, un `DEVELOPMENT_TEAM = 6V2ZR3A87S` colado se revirtió a `""`.** Es la misma fricción que ya anotó la bitácora del MR #8: correr tests de UI hace que `xcodebuild` firme el `.pbxproj` con el Team ID local. No es parte de este fix; se sacó del diff antes de tocar nada más para no repetir el error de commitear un Team ID personal.
+
+**Versión de Swift y de iOS: ya estaban en lo último disponible, no se tocó nada.** `SWIFT_VERSION = 6.0` es el modo de lenguaje más nuevo que existe (Swift versiona "language modes" como 4, 5, 6, no en función de la versión del compilador). `IPHONEOS_DEPLOYMENT_TARGET` / `MACOSX_DEPLOYMENT_TARGET = 26.5` coincide con Xcode 26.5, la última versión estable liberada. Queda anotado como una decisión consciente y no un default sin mirar: fijar el deployment target en la versión de iOS más nueva excluye cualquier dispositivo con una versión anterior — aceptable para este challenge, donde se evalúa en simulador con el SDK más nuevo.
+
+**Verificación.** Build de `ChallengeUALA` contra el simulador de iPhone 17 Pro en verde. Suite completa (`CI_iOS`, que cubre `CitiesTests` + `CitiesiOSTests` + `ChallengeUALATests` + `ChallengeUALAUITests`) en verde: 150 tests, 0 fallas — mismo número que reporta la entrada anterior, sin regresiones.
+
+---
+
 ## 2026-08-12 — Corrección: `publishVisibleResults()` materializaba la ventana entera en cada publish
 
 **Qué se rompió y cuándo.** El MR #8 (`docs/BITACORA.md:16-19`, más abajo) movió el cruce entre resultados y favoritos del lado de la vista al ViewModel: `State` pasó de publicar `CitySearchResults` a publicar `[CityCellViewModel]`, construido con `results.limited(to: visibleCount).map { CityCellViewModel(...) }`. `limited(to:)` sigue siendo O(1) (prefix sobre `ArraySlice`), pero el `.map` que le sigue no: construye `visibleCount` structs con dos interpolaciones de `String` cada uno, en el `MainActor`, en cada publish. La ganancia arquitectónica de ese MR era real —`CitiesiOS` deja de instanciar tipos de `Cities`, que es la regla explícita de `CLAUDE.md`—, pero el costo asociado no se vio ni se midió.
