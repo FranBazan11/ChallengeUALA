@@ -18,6 +18,8 @@ enum UITestCityCatalog {
 
     static var firstCityName: String { zeroPaddedName(1) }
 
+    static var secondCityName: String { zeroPaddedName(2) }
+
     static var cityBeyondTheFirstPageName: String { zeroPaddedName(citiesPerPage + 10) }
 
     static let cityOutsideTheSharedPrefixName = "Hurzuf"

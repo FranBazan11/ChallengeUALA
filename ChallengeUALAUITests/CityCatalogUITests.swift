@@ -86,9 +86,41 @@ final class CityCatalogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[emptyMapMessage].exists, "no se ve el panel de mapa junto a la lista")
     }
 
+    @MainActor
+    func test_selectingACityInLandscape_marksItsRowAsSelected() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let app = launchAppWithTestCatalog()
+
+        firstCity(in: app).tap()
+
+        XCTAssertTrue(
+            row(for: UITestCityCatalog.firstCityName, in: app).isSelected,
+            "la fila de la ciudad que está en el mapa no quedó marcada como seleccionada"
+        )
+    }
+
+    @MainActor
+    func test_selectingAnotherCityInLandscape_unmarksThePreviousRow() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let app = launchAppWithTestCatalog()
+        firstCity(in: app).tap()
+
+        app.staticTexts["\(UITestCityCatalog.secondCityName), AR"].tap()
+
+        XCTAssertFalse(
+            row(for: UITestCityCatalog.firstCityName, in: app).isSelected,
+            "quedaron dos filas marcadas como seleccionadas a la vez"
+        )
+    }
+
     // MARK: - Helpers
 
     private var emptyMapMessage: String { "Elegí una ciudad para verla en el mapa" }
+
+    @MainActor
+    private func row(for cityName: String, in app: XCUIApplication) -> XCUIElement {
+        app.staticTexts["\(cityName), AR"]
+    }
 
     @MainActor
     private func scrollToTheEnd(of app: XCUIApplication, swipes: Int = 12) {
